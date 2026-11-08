@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&Play - Übersicht</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <!-- USER FLOW: Übersicht -->
+    <div id="view-user-overview" class="container">
+        <div class="detail-header" style="margin-bottom: 20px;">
+            <h2 style="margin: 0;">Aktuelle Flipper</h2>
+            <button id="user-overview-feedback-btn" class="btn-green" onclick="showFeedbackOnIndex()">+ Feedback geben</button>
+        </div>
+        <div class="grid-overview" id="user-grid">
+            <p style="padding: 20px;">Lade Flipper...</p>
+        </div>
+    </div>
+
+    <!-- USER FLOW: Allgemeines Feedback -->
+    <div id="view-feedback" class="container hidden">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="showOverviewOnIndex()" title="Zurück zur Übersicht">←</button>
+                <h2 style="margin: 0;">Allgemeines Feedback &amp; Vorschläge</h2>
+            </div>
+        </div>
+        <div class="report-form">
+            <label><strong>Deine Nachricht / Idee für das Pin&amp;Play</strong></label>
+            <textarea id="feedback-desc" rows="6" placeholder="Was gefällt dir gut? Was können wir verbessern?"></textarea>
+
+            <label><strong>Deine E-Mail (Für Rückfragen, freiwillig)</strong></label>
+            <input type="email" id="feedback-email" placeholder="email@beispiel.de">
+
+            <label><strong>Foto anhängen (Optional)</strong></label><br>
+            <input type="file" id="feedback-file" accept="image/*" style="margin-bottom: 15px; border: none; padding: 0;">
+
+            <button id="submit-feedback-btn" class="btn-green" style="width: 100%; padding: 15px;" onclick="submitGeneralFeedback()">Feedback absenden</button>
+            <p id="feedback-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+    <script>
+        function renderUserGrid() {
+            const grid = document.getElementById('user-grid');
+            const fbBtn = document.getElementById('user-overview-feedback-btn');
+            if (fbBtn) {
+                fbBtn.style.display = isTechMode ? 'none' : 'inline-block';
+            }
+
+            grid.innerHTML = '';
+
+            const userSortedPins = [...pinballs].sort((a, b) => {
+                if (a.isAktiv !== b.isAktiv) return a.isAktiv ? -1 : 1;
+                return a.name.localeCompare(b.name, 'de');
+            });
+
+            userSortedPins.forEach(p => {
+                const aktivLabel = p.isAktiv ? '' : '<br><span style="color: var(--gold-mid); font-size: 13px; font-weight: normal;">(Derzeit nicht in Aufstellung)</span>';
+                const cardStyle = p.isAktiv ? '' : 'opacity: 0.45; filter: grayscale(65%);';
+                const imgHtml = p.imgUrl ? `<img src="${p.imgUrl}" alt="${p.name}" loading="lazy">` : '';
+                const targetUrl = isTechMode ? `tech-detail.html?id=${p.id}` : `detail.html?id=${p.id}`;
+
+                grid.innerHTML += `
+                    <div class="flipper-card" onclick="window.location.href='${targetUrl}'" style="${cardStyle}">
+                        <div class="placeholder-img">${imgHtml}</div>
+                        <h3 style="margin: 10px 0 0 0;">${p.name}${aktivLabel}</h3>
+                    </div>
+                `;
+            });
+        }
+
+        function showFeedbackOnIndex() {
+            document.getElementById('view-user-overview').classList.add('hidden');
+            document.getElementById('view-feedback').classList.remove('hidden');
+        }
+
+        function showOverviewOnIndex() {
+            document.getElementById('view-feedback').classList.add('hidden');
+            document.getElementById('view-user-overview').classList.remove('hidden');
+        }
+
+        async function submitGeneralFeedback() {
+            const desc = document.getElementById('feedback-desc').value.trim();
+            const email = document.getElementById('feedback-email').value.trim();
+            const fileInput = document.getElementById('feedback-file');
+
+            const statusEl = document.getElementById('feedback-status');
+            const submitBtn = document.getElementById('submit-feedback-btn');
+
+            if (!desc) {
+                alert("Bitte gib eine Nachricht ein!");
+                return;
+            }
+
+            submitBtn.disabled = true;
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--gold-light)';
+            statusEl.innerText = "Sende Feedback...";
+
+            try {
+                const uploadedFilePath = await uploadIncomingPhoto('feedback', fileInput.files[0]);
+
+                const { error } = await db.from('feedback').insert([{
+                    nachricht: desc,
+                    email: email,
+                    foto: uploadedFilePath
+                }]);
+
+                if (error) throw error;
+
+                statusEl.style.color = '#3fb950';
+                statusEl.innerText = "Vielen Dank für dein Feedback!";
+                document.getElementById('feedback-desc').value = '';
+                document.getElementById('feedback-email').value = '';
+                fileInput.value = '';
+
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                    submitBtn.disabled = false;
+                    showOverviewOnIndex();
+                }, 1200);
+            } catch (err) {
+                statusEl.style.color = '#ff7b72';
+                statusEl.innerText = "Fehler beim Senden: " + err.message;
+                submitBtn.disabled = false;
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => renderUserGrid());
+            renderUserGrid();
+        });
+    </script>
+</body>
+</html>

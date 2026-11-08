@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&Play - Spieler-Feedback</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="window.location.href='techniker.html'" title="Zurück zum Techniker-Dashboard">←</button>
+                <h2 style="margin: 0;">Eingegangenes Spieler-Feedback (<span id="feedback-total-count">0</span>)</h2>
+            </div>
+            <div class="detail-header-actions">
+                <label for="sort-feedback" style="font-size: 13px; font-weight: bold; color: var(--text-muted);">Sortierung:</label>
+                <select id="sort-feedback" class="bold-sort-select" onchange="renderFeedbackList()" style="min-width: 200px;">
+                    <option value="date-desc">Datum: Neueste zuerst</option>
+                    <option value="date-asc">Datum: Älteste zuerst</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="tech-feedback-list">
+            <p style="padding: 15px;">Lade Feedback-Einträge...</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+    <script>
+        function renderFeedbackList() {
+            const listEl = document.getElementById('tech-feedback-list');
+            const countEl = document.getElementById('feedback-total-count');
+            const sortVal = document.getElementById('sort-feedback').value;
+
+            countEl.innerText = feedbackDB.length;
+
+            if (feedbackDB.length === 0) {
+                listEl.innerHTML = '<p style="margin: 15px 0; color: var(--text-muted);"><i>Derzeit liegen keine Feedback-Nachrichten vor.</i></p>';
+                return;
+            }
+
+            const sorted = [...feedbackDB].sort((a, b) => {
+                const dA = new Date(a.date).getTime() || 0;
+                const dB = new Date(b.date).getTime() || 0;
+                return sortVal === 'date-asc' ? dA - dB : dB - dA;
+            });
+
+            listEl.innerHTML = '';
+            sorted.forEach(item => {
+                const createdStr = formatDateTime(item.date);
+                const safeText = item.text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeEmail = item.email.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeFoto = item.foto.replace(/'/g, "\\'");
+
+                const emailHtml = safeEmail
+                    ? `<div class="report-meta-email">Kontakt-E-Mail: <strong style="color:var(--gold-light);">${safeEmail}</strong></div>`
+                    : `<div class="report-meta-email"><i>Anonym eingereicht (Keine E-Mail angegeben)</i></div>`;
+
+                const photoBtnHtml = item.foto
+                    ? `<button id="btn-fb-photo-${item.id}" class="btn-switch" onclick="togglePrivatePhoto('fb-photo-box-${item.id}', 'btn-fb-photo-${item.id}', '${safeFoto}', 'Angehängtes Foto ansehen', 'Foto ausblenden', 'Angehängtes Foto')">Angehängtes Foto ansehen</button>`
+                    : '<span></span>';
+
+                listEl.innerHTML += `
+                    <div class="report-comment" style="border-left: 4px solid var(--gold-mid);">
+                        <div class="report-header-bar">
+                            <span style="font-weight: bold; color: var(--gold-light);">Feedback #${item.id}</span>
+                            <span style="color: var(--text-muted); font-size: 13px;">Eingereicht am ${createdStr}</span>
+                        </div>
+                        <div class="report-body-text">${safeText}</div>
+                        ${emailHtml}
+                        <div id="fb-photo-box-${item.id}" style="margin: 10px 0; display:none;"></div>
+                        <div class="report-actions">
+                            <div>${photoBtnHtml}</div>
+                            <button class="btn-report" onclick="deleteFeedbackEntry(${item.id}, '${safeFoto}')">Löschen</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        async function deleteFeedbackEntry(fbId, filePath) {
+            if (!confirm("Möchtest du diesen Feedback-Eintrag wirklich löschen?")) return;
+
+            if (filePath) {
+                await db.storage.from('fotos-incoming').remove([filePath]);
+            }
+
+            const { error } = await db.from('feedback').delete().eq('id', fbId);
+            if (error) {
+                alert("Fehler beim Löschen: " + error.message);
+                return;
+            }
+
+            await loadAllDatabaseData();
+            renderSharedHeader();
+            renderFeedbackList();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => {
+                if (!isLoggedIn) {
+                    window.location.href = 'index.html#login';
+                    return;
+                }
+                renderFeedbackList();
+            });
+
+            if (!isLoggedIn) {
+                window.location.href = 'index.html#login';
+                return;
+            }
+            if (!isTechMode) {
+                isTechMode = true;
+                localStorage.setItem('pinplay_tech_mode', 'true');
+                renderSharedHeader();
+            }
+
+            renderFeedbackList();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&Play - Flipper Details</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <!-- USER FLOW: Reguläre Singuläre Flipperansicht -->
+    <div id="view-user-detail" class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="window.location.href='index.html'" title="Zurück zur Übersicht">←</button>
+                <h2 id="detail-title" style="margin: 0;">Lade Flipper...</h2>
+            </div>
+            <div class="detail-header-actions">
+                <button class="btn-power" id="detail-power" onclick="handleDetailPowerClick()">ON</button>
+                <button class="btn-report" id="detail-report-btn" onclick="openUserReportView()">Defekt melden</button>
+            </div>
+        </div>
+
+        <div class="detail-top-section">
+            <div class="detail-left">
+                <div class="placeholder-img-large" id="detail-img-box"></div>
+            </div>
+            <div class="detail-right">
+                <div class="info-box">
+                    <strong>Highscore:</strong> <span id="detail-score"></span>
+                    <button id="detail-add-score-btn" class="btn-add-score" onclick="goToHighscoreSubmit()" title="Neuen Highscore eintragen">+</button><br>
+                    <strong>Baujahr:</strong> <span id="detail-year"></span><br>
+                    <strong>Hersteller:</strong> <span id="detail-maker"></span><br>
+                    <strong>Designer:</strong> <span id="detail-designer"></span><br>
+                    <strong>Produktionsanzahl:</strong> <span id="detail-prod"></span>
+                </div>
+            </div>
+        </div>
+        <div class="georg-text-container" id="detail-desc"></div>
+    </div>
+
+    <!-- USER FLOW: Nur Defekt melden -->
+    <div id="view-report" class="container hidden">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="closeUserReportView()" title="Zurück zum Flipper">←</button>
+                <h2 style="margin: 0;">Defekt melden für: <span id="report-title"></span></h2>
+            </div>
+        </div>
+        <div class="report-form">
+            <label><strong>Beschreibung des Defekts</strong></label>
+            <textarea id="report-desc" rows="6" placeholder="Bitte beschreibe das Problem am Flipper möglichst genau..."></textarea>
+
+            <label><strong>Deine E-Mail (Für Status-Updates bei Reparatur, freiwillig)</strong></label>
+            <input type="email" id="report-email" placeholder="email@beispiel.de">
+
+            <label><strong>Foto vom Defekt hochladen (Optional)</strong></label><br>
+            <input type="file" id="report-file" accept="image/*" style="margin-bottom: 15px; border: none; padding: 0;">
+
+            <button id="submit-report-btn" class="btn-report" style="width: 100%; padding: 15px;" onclick="submitDefectReport()">Defekt absenden</button>
+            <p id="submit-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+    <script>
+        let currentPinball = null;
+
+        function renderDetailView() {
+            if (!currentPinball) return;
+
+            document.title = `Pin&Play - ${currentPinball.name}`;
+            populatePinballInfoBox(currentPinball, 'detail');
+            document.getElementById('report-title').innerText = currentPinball.name;
+            document.getElementById('detail-desc').innerText = currentPinball.desc;
+
+            const pwrBtn = document.getElementById('detail-power');
+            const reportBtn = document.getElementById('detail-report-btn');
+            const addScoreBtn = document.getElementById('detail-add-score-btn');
+
+            if (isTechMode) {
+                stylePowerButton(pwrBtn, currentPinball.power);
+                reportBtn.style.display = 'inline-block';
+                addScoreBtn.style.display = 'inline-flex';
+            } else {
+                if (!currentPinball.isAktiv) {
+                    pwrBtn.style.display = 'none';
+                    reportBtn.style.display = 'none';
+                    addScoreBtn.style.display = 'none';
+                } else {
+                    reportBtn.style.display = 'inline-block';
+                    addScoreBtn.style.display = 'inline-flex';
+                    if (currentPinball.power === 'OFF') {
+                        pwrBtn.style.display = 'inline-block';
+                        pwrBtn.innerText = "Gerät anschalten";
+                        pwrBtn.style.backgroundColor = 'var(--status-green)';
+                        pwrBtn.style.color = 'white';
+                        pwrBtn.style.borderColor = '#3fb950';
+                    } else {
+                        pwrBtn.style.display = 'none';
+                    }
+                }
+            }
+        }
+
+        function goToHighscoreSubmit() {
+            if (!currentPinball) return;
+            window.location.href = `highscores.html?submit=1&id=${currentPinball.id}&from=detail`;
+        }
+
+        function openUserReportView() {
+            if (!currentPinball) return;
+            if (!isTechMode && !currentPinball.isAktiv) {
+                alert("Dieser Flipper befindet sich derzeit in Wartung (Inaktiv) und kann nicht gemeldet werden.");
+                return;
+            }
+            document.getElementById('view-user-detail').classList.add('hidden');
+            document.getElementById('view-report').classList.remove('hidden');
+        }
+
+        function closeUserReportView() {
+            document.getElementById('view-report').classList.add('hidden');
+            document.getElementById('view-user-detail').classList.remove('hidden');
+        }
+
+        async function handleDetailPowerClick() {
+            if (!currentPinball) return;
+            await togglePinballPower(currentPinball.id, document.getElementById('detail-power'), (updatedPin) => {
+                currentPinball = updatedPin;
+                renderDetailView();
+            });
+        }
+
+        async function submitDefectReport() {
+            if (!currentPinball) return;
+            if (!isTechMode && !currentPinball.isAktiv) {
+                alert("Sicherheitssperre: Inaktive Flipper können nicht gemeldet werden.");
+                return;
+            }
+
+            const desc = document.getElementById('report-desc').value.trim();
+            const email = document.getElementById('report-email').value.trim();
+            const fileInput = document.getElementById('report-file');
+
+            const statusEl = document.getElementById('submit-status');
+            const submitBtn = document.getElementById('submit-report-btn');
+
+            if (!desc) {
+                alert("Bitte gib eine Beschreibung des Defekts ein!");
+                return;
+            }
+
+            submitBtn.disabled = true;
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--gold-light)';
+            statusEl.innerText = "Sende Defekt-Meldung...";
+
+            try {
+                const uploadedFilePath = await uploadIncomingPhoto('reports', fileInput.files[0]);
+
+                const { error } = await db.from('reports').insert([{
+                    flipper_id: currentPinball.id,
+                    meldung: desc,
+                    intensitaet: null,
+                    status: 'offen',
+                    email: email,
+                    verifiziert: false,
+                    foto_url: uploadedFilePath
+                }]);
+
+                if (error) throw error;
+
+                await loadAllDatabaseData();
+                statusEl.style.color = '#3fb950';
+                statusEl.innerText = "Defekt erfolgreich gemeldet!";
+                document.getElementById('report-desc').value = '';
+                document.getElementById('report-email').value = '';
+                fileInput.value = '';
+
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                    submitBtn.disabled = false;
+                    closeUserReportView();
+                }, 1000);
+            } catch (err) {
+                statusEl.style.color = '#ff7b72';
+                statusEl.innerText = "Fehler beim Senden: " + err.message;
+                submitBtn.disabled = false;
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const pinId = Number(params.get('id'));
+
+            await initSharedApp(() => {
+                currentPinball = pinballs.find(p => p.id === pinId);
+                if (currentPinball) renderDetailView();
+            });
+
+            currentPinball = pinballs.find(p => p.id === pinId);
+            if (!currentPinball) {
+                window.location.href = 'index.html';
+                return;
+            }
+            renderDetailView();
+        });
+    </script>
+</body>
+</html>

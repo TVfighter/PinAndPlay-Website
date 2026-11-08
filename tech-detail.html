@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&Play - Techniker Details</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div id="view-tech-detail" class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="window.location.href='techniker.html'" title="Zurück zur Techniker-Übersicht">←</button>
+                <h2 id="tech-detail-title" style="margin: 0;">Lade Flipper...</h2>
+            </div>
+            <div class="detail-header-actions">
+                <button class="btn-power" id="tech-detail-power" onclick="handleTechDetailPowerClick()">ON</button>
+                <button class="btn-yellow">Manual (PDF)</button>
+                <button class="btn-status-tech" id="tech-detail-status-btn" onclick="toggleMachineStatus()" title="Klicken zum Umschalten (Spielbereit / Wartung)">Status: Spielbereit</button>
+            </div>
+        </div>
+        <div class="detail-top-section">
+            <div class="detail-left">
+                <div class="placeholder-img-large" id="tech-detail-img-box"></div>
+            </div>
+            <div class="detail-right">
+                <div class="info-box">
+                    <strong>Highscore:</strong> <span id="tech-detail-score"></span>
+                    <button class="btn-add-score" onclick="goToTechHighscoreSubmit()" title="Highscore direkt verifiziert eintragen">+</button><br>
+                    <strong>Baujahr:</strong> <span id="tech-detail-year"></span><br>
+                    <strong>Hersteller:</strong> <span id="tech-detail-maker"></span><br>
+                    <strong>Designer:</strong> <span id="tech-detail-designer"></span><br>
+                    <strong>Produktionsanzahl:</strong> <span id="tech-detail-prod"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TECHNIKER: Vereinigte 3-Tab-Verwaltung (Offene Meldungen, Behobene Meldungen & Highscores) -->
+        <div style="margin-top: 30px;">
+            <h3 style="margin: 0 0 15px 0; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">Meldungen, Archiv &amp; Highscores</h3>
+
+            <div class="report-mode-tabs">
+                <button id="tab-btn-open" class="report-tab-btn active-open" onclick="switchReportStatusView('offen')">
+                    Offene Meldungen (<span id="tab-count-open">0</span>)
+                </button>
+                <button id="tab-btn-resolved" class="report-tab-btn" onclick="switchReportStatusView('behoben')">
+                    Behobene Meldungen / Archiv (<span id="tab-count-resolved">0</span>)
+                </button>
+                <button id="tab-btn-highscore" class="report-tab-btn" onclick="switchReportStatusView('highscore')">
+                    Highscores (<span id="tab-count-highscore">0</span>)
+                </button>
+            </div>
+
+            <div id="report-controls-box" class="report-controls">
+                <div class="filter-Toolbar">
+                    <div>
+                        <div style="font-size: 13px; font-weight: bold; color: var(--text-muted); margin-bottom: 8px;">
+                            Filter (Klicken zum Ein-/Ausblenden):
+                            <span style="font-weight: normal; color: var(--gold-light); cursor: pointer; text-decoration: underline; margin-left: 8px;" onclick="resetCurrentTabFilters()">Alle aktivieren</span>
+                        </div>
+
+                        <div id="report-filter-pills" class="filter-pills-group">
+                            <button id="pill-filter-u" class="filter-pill pill-unverif" onclick="toggleReportFilterPill('u')">
+                                Unverifiziert
+                            </button>
+                            <button id="pill-filter-1" class="filter-pill pill-p1" onclick="toggleReportFilterPill(1)">
+                                Prio 1 (Unspielbar)
+                            </button>
+                            <button id="pill-filter-2" class="filter-pill pill-p2" onclick="toggleReportFilterPill(2)">
+                                Prio 2 (Spielspaß negativ)
+                            </button>
+                            <button id="pill-filter-3" class="filter-pill pill-p3" onclick="toggleReportFilterPill(3)">
+                                Prio 3 (Kaum spürbar)
+                            </button>
+                        </div>
+
+                        <div id="hs-filter-pills" class="filter-pills-group hidden">
+                            <button id="pill-hs-unverif" class="filter-pill pill-unverif" onclick="toggleHsFilterPill('unverif')">
+                                Unverifiziert
+                            </button>
+                            <button id="pill-hs-verif" class="filter-pill pill-verif" onclick="toggleHsFilterPill('verif')">
+                                Verifiziert
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="sort-and-action-group">
+                        <div>
+                            <label for="sort-reports" style="font-size: 13px; font-weight: bold; color: var(--text-muted); display: block; margin-bottom: 6px;">Sortierung:</label>
+                            <select id="sort-reports" class="bold-sort-select" onchange="renderCurrentTechTabContent()"></select>
+                        </div>
+                        <button id="tech-context-add-btn" class="btn-context-add" onclick="handleContextAddClick()">
+                            + Neue Meldung
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="resolved-visual-banner" class="resolved-archive-banner hidden">
+                <span>Archiv der behobenen Defekte an diesem Flipper.</span>
+                <span style="font-size: 13px; font-weight: normal;">Standardmäßig nach neuesten Behebungen sortiert.</span>
+            </div>
+
+            <div id="highscore-visual-banner" class="highscore-archive-banner hidden">
+                <span>Highscore-Prüfung &amp; Bestenliste für dieses Gerät.</span>
+                <span style="font-size: 13px; font-weight: normal;">Unverifizierte Einsendungen stehen standardmäßig ganz oben.</span>
+            </div>
+
+            <div id="tech-detail-reports"></div>
+        </div>
+    </div>
+
+    <!-- TECHNIKER POPUP 1 (MODAL): Meldung neu anlegen oder bearbeiten / verifizieren -->
+    <div id="tech-report-modal" class="modal-overlay hidden" onclick="handleModalBackdropClick(event, 'tech-report-modal')">
+        <div class="modal-box">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 id="modal-report-heading" style="margin: 0;">Meldung bearbeiten</h3>
+                <button class="btn-switch" onclick="closeTechReportModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <label><strong>Priorität / Schweregrad (Durch Techniker festgelegt)</strong></label>
+                <select id="modal-report-prio">
+                    <option value="1">Prio 1 — Hoch (Unspielbar / Abgeschaltet)</option>
+                    <option value="2">Prio 2 — Mittel (Spielspaß negativ / Eingeschränkt)</option>
+                    <option value="3">Prio 3 — Niedrig (Kaum spürbar / Kosmetisch)</option>
+                </select>
+
+                <label><strong>Beschreibung des Defekts</strong></label>
+                <textarea id="modal-report-desc" rows="5" placeholder="Bitte beschreibe das Problem am Flipper im Detail..."></textarea>
+
+                <label><strong id="modal-file-label">Foto vom Defekt hochladen (Optional)</strong></label><br>
+                <input type="file" id="modal-report-file" accept="image/*" style="margin-bottom: 15px; border: none; padding: 0;">
+
+                <button id="modal-save-btn" class="btn-report btn-yellow" style="width: 100%; padding: 14px;" onclick="saveTechReportModal()">
+                    Speichern &amp; Verifizieren
+                </button>
+                <p id="modal-report-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TECHNIKER POPUP 2 (MODAL): Meldung als Behoben markieren -->
+    <div id="tech-resolve-modal" class="modal-overlay hidden" onclick="handleModalBackdropClick(event, 'tech-resolve-modal')">
+        <div class="modal-box">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 style="margin: 0;">Meldung als behoben markieren</h3>
+                <button class="btn-switch" onclick="closeResolveModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 15px;">
+                    Du kannst hier optional festhalten, wie das Problem gelöst wurde, oder ein Foto der Reparatur anhängen. Du kannst die Felder aber auch einfach leer lassen.
+                </p>
+
+                <label><strong>Lösungsweg / Reparatur-Notiz (Optional)</strong></label>
+                <textarea id="resolve-modal-text" rows="4" placeholder="z.B. Spule am linken Slingshot getauscht / Sicherung F104 ersetzt..."></textarea>
+
+                <label><strong>Foto zur Lösung hinzufügen (Optional)</strong></label><br>
+                <input type="file" id="resolve-modal-file" accept="image/*" style="margin-bottom: 15px; border: none; padding: 0;">
+
+                <button id="resolve-modal-save-btn" class="btn-report btn-yellow" style="width: 100%; padding: 14px;" onclick="confirmResolveReport()">
+                    Jetzt als behoben abschließen
+                </button>
+                <p id="resolve-modal-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+    <script>
+        let currentPinball = null;
+        let currentReportStatusView = 'offen';
+        let editingReportId = null;
+        let resolvingReportId = null;
+
+        let activeReportFilters = { u: true, 1: true, 2: true, 3: true };
+        let activeHsFilters = { unverif: true, verif: true };
+
+        const TAB_SORT_OPTIONS = {
+            offen: [
+                { value: 'prio-desc', label: 'Prio: Hoch → Niedrig' },
+                { value: 'prio-asc', label: 'Prio: Niedrig → Hoch' },
+                { value: 'date-desc', label: 'Gemeldet: Neueste zuerst' },
+                { value: 'date-asc', label: 'Gemeldet: Älteste zuerst' }
+            ],
+            behoben: [
+                { value: 'resolved-desc', label: 'Behoben: Neueste zuerst' },
+                { value: 'resolved-asc', label: 'Behoben: Älteste zuerst' },
+                { value: 'prio-desc', label: 'Prio: Hoch → Niedrig' },
+                { value: 'prio-asc', label: 'Prio: Niedrig → Hoch' }
+            ],
+            highscore: [
+                { value: 'hs-unverif-first', label: 'Unverifiziert & Punkte ↓' },
+                { value: 'hs-score-desc', label: 'Punkte: Höchste zuerst' },
+                { value: 'hs-score-asc', label: 'Punkte: Niedrigste zuerst' },
+                { value: 'hs-date-desc', label: 'Datum: Neueste zuerst' },
+                { value: 'hs-date-asc', label: 'Datum: Älteste zuerst' }
+            ]
+        };
+
+        function renderTechDetailHeaderAndInfo() {
+            if (!currentPinball) return;
+
+            document.title = `Pin&Play Technik - ${currentPinball.name}`;
+            populatePinballInfoBox(currentPinball, 'tech-detail');
+            stylePowerButton(document.getElementById('tech-detail-power'), currentPinball.power);
+
+            const statusBtn = document.getElementById('tech-detail-status-btn');
+            statusBtn.innerText = "Status: " + currentPinball.status;
+            statusBtn.className = "btn-status-tech " + getStatusColorClass(currentPinball.status);
+        }
+
+        function goToTechHighscoreSubmit() {
+            if (!currentPinball) return;
+            window.location.href = `highscores.html?submit=1&id=${currentPinball.id}&from=tech-detail`;
+        }
+
+        async function handleTechDetailPowerClick() {
+            if (!currentPinball) return;
+            const btn = document.getElementById('tech-detail-power');
+            await togglePinballPower(currentPinball.id, btn, (updatedPin) => {
+                currentPinball = updatedPin;
+                stylePowerButton(btn, currentPinball.power);
+            });
+        }
+
+        async function toggleMachineStatus() {
+            if (!currentPinball) return;
+            const newAktiv = !currentPinball.isAktiv;
+            const statusBtn = document.getElementById('tech-detail-status-btn');
+            statusBtn.innerText = "Speichere...";
+
+            const { error } = await db.from('flipper').update({ aktiv: newAktiv }).eq('id', currentPinball.id);
+            if (error) {
+                alert("Fehler beim Ändern des Status: " + error.message);
+                statusBtn.innerText = "Status: " + currentPinball.status;
+                return;
+            }
+
+            currentPinball.isAktiv = newAktiv;
+            currentPinball.status = newAktiv ? "Spielbereit" : "Wartung (Inaktiv)";
+            statusBtn.innerText = "Status: " + currentPinball.status;
+            statusBtn.className = "btn-status-tech " + getStatusColorClass(currentPinball.status);
+            saveStateToCache();
+        }
+
+        function populateSortDropdownForTab(tabKey) {
+            const sortSelect = document.getElementById('sort-reports');
+            const options = TAB_SORT_OPTIONS[tabKey] || TAB_SORT_OPTIONS.offen;
+            sortSelect.innerHTML = '';
+            options.forEach(opt => {
+                const el = document.createElement('option');
+                el.value = opt.value;
+                el.textContent = opt.label;
+                sortSelect.appendChild(el);
+            });
+            sortSelect.value = options[0].value;
+        }
+
+        function handleContextAddClick() {
+            if (!currentPinball) return;
+            if (currentReportStatusView === 'highscore') {
+                goToTechHighscoreSubmit();
+            } else {
+                openTechReportModal(null);
+            }
+        }
+
+        function switchReportStatusView(targetView) {
+            currentReportStatusView = targetView;
+            populateSortDropdownForTab(targetView);
+            renderCurrentTechTabContent();
+        }
+
+        function renderCurrentTechTabContent() {
+            if (currentReportStatusView === 'highscore') {
+                renderTechHighscores();
+            } else {
+                renderReports();
+            }
+        }
+
+        function toggleReportFilterPill(key) {
+            activeReportFilters[key] = !activeReportFilters[key];
+            document.getElementById(`pill-filter-${key}`)?.classList.toggle('inactive', !activeReportFilters[key]);
+            renderReports();
+        }
+
+        function toggleHsFilterPill(key) {
+            activeHsFilters[key] = !activeHsFilters[key];
+            document.getElementById(`pill-hs-${key}`)?.classList.toggle('inactive', !activeHsFilters[key]);
+            renderTechHighscores();
+        }
+
+        function resetCurrentTabFilters() {
+            if (currentReportStatusView === 'highscore') {
+                activeHsFilters = { unverif: true, verif: true };
+                ['unverif', 'verif'].forEach(k => document.getElementById(`pill-hs-${k}`)?.classList.remove('inactive'));
+                renderTechHighscores();
+            } else {
+                activeReportFilters = { u: true, 1: true, 2: true, 3: true };
+                ['u', 1, 2, 3].forEach(k => document.getElementById(`pill-filter-${k}`)?.classList.remove('inactive'));
+                renderReports();
+            }
+        }
+
+        function updateReportStatusTabsUI() {
+            if (!currentPinball) return;
+            const pinReports = reportsDB.filter(r => r.pinballId === currentPinball.id);
+            document.getElementById('tab-count-open').innerText = pinReports.filter(r => r.status === 'offen').length;
+            document.getElementById('tab-count-resolved').innerText = pinReports.filter(r => r.status === 'behoben').length;
+            document.getElementById('tab-count-highscore').innerText = highscoresDB.filter(h => h.pinballId === currentPinball.id).length;
+
+            const tabOpen = document.getElementById('tab-btn-open');
+            const tabRes = document.getElementById('tab-btn-resolved');
+            const tabHs = document.getElementById('tab-btn-highscore');
+            const controlsBox = document.getElementById('report-controls-box');
+            const reportPills = document.getElementById('report-filter-pills');
+            const hsPills = document.getElementById('hs-filter-pills');
+            const resBanner = document.getElementById('resolved-visual-banner');
+            const hsBanner = document.getElementById('highscore-visual-banner');
+            const listContainer = document.getElementById('tech-detail-reports');
+            const addBtn = document.getElementById('tech-context-add-btn');
+
+            tabOpen.className = 'report-tab-btn';
+            tabRes.className = 'report-tab-btn';
+            tabHs.className = 'report-tab-btn';
+            controlsBox.classList.remove('resolved-mode-controls', 'highscore-mode-controls');
+            resBanner.classList.add('hidden');
+            hsBanner.classList.add('hidden');
+            listContainer.classList.remove('reports-list-resolved-wrapper', 'reports-list-highscore-wrapper');
+
+            if (currentReportStatusView === 'offen') {
+                tabOpen.classList.add('active-open');
+                reportPills.classList.remove('hidden');
+                hsPills.classList.add('hidden');
+                addBtn.innerText = '+ Neue Meldung';
+            } else if (currentReportStatusView === 'behoben') {
+                tabRes.classList.add('active-resolved');
+                controlsBox.classList.add('resolved-mode-controls');
+                reportPills.classList.remove('hidden');
+                hsPills.classList.add('hidden');
+                resBanner.classList.remove('hidden');
+                listContainer.classList.add('reports-list-resolved-wrapper');
+                addBtn.innerText = '+ Neue Meldung';
+            } else if (currentReportStatusView === 'highscore') {
+                tabHs.classList.add('active-highscore');
+                controlsBox.classList.add('highscore-mode-controls');
+                reportPills.classList.add('hidden');
+                hsPills.classList.remove('hidden');
+                hsBanner.classList.remove('hidden');
+                listContainer.classList.add('reports-list-highscore-wrapper');
+                addBtn.innerText = '+ Neuer Highscore';
+            }
+        }
+
+        function renderTechHighscores() {
+            const container = document.getElementById('tech-detail-reports');
+            if (!currentPinball || !container) return;
+
+            updateReportStatusTabsUI();
+
+            let list = highscoresDB
+                .filter(h => h.pinballId === currentPinball.id)
+                .filter(h => h.verifiziert ? activeHsFilters.verif : activeHsFilters.unverif);
+
+            const sortVal = document.getElementById('sort-reports').value;
+            list.sort((a, b) => {
+                const dateA = new Date(a.date).getTime() || 0;
+                const dateB = new Date(b.date).getTime() || 0;
+                if (sortVal === 'hs-score-desc') return b.score - a.score;
+                if (sortVal === 'hs-score-asc') return a.score - b.score;
+                if (sortVal === 'hs-date-desc') return dateB - dateA;
+                if (sortVal === 'hs-date-asc') return dateA - dateB;
+                if (a.verifiziert !== b.verifiziert) return a.verifiziert ? 1 : -1;
+                return b.score - a.score;
+            });
+
+            if (list.length === 0) {
+                container.innerHTML = '<p style="margin: 10px 0; color: var(--text-muted);"><i>Keine Highscores für die gewählten Filter an diesem Flipper vorhanden.</i></p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            list.forEach(h => {
+                const dateStr = new Date(h.date).toLocaleDateString('de-DE');
+                const safeInit = h.initials.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeFoto = h.beweisfoto.replace(/'/g, "\\'");
+                const borderColor = h.verifiziert ? 'var(--status-green)' : 'var(--gold-mid)';
+                const badgeHtml = h.verifiziert
+                    ? '<span class="badge-verified">Verifiziert</span>'
+                    : '<span class="badge-unverified">Wartet auf Verifizierung</span>';
+
+                const photoBtn = h.beweisfoto
+                    ? `<button id="btn-hs-photo-${h.id}" class="btn-switch" onclick="togglePrivatePhoto('hs-photo-box-${h.id}', 'btn-hs-photo-${h.id}', '${safeFoto}', 'Beweisfoto ansehen', 'Beweisfoto ausblenden')">Beweisfoto ansehen</button>`
+                    : '';
+
+                const verifyBtn = !h.verifiziert
+                    ? `<button class="btn-switch btn-yellow" onclick="verifyHighscore(${h.id})">Verifizieren</button>`
+                    : '';
+
+                container.innerHTML += `
+                    <div class="report-comment ${!h.verifiziert ? 'unverified-card' : ''}" style="border-left: 5px solid ${borderColor};">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                ${badgeHtml}
+                                <strong style="color:var(--gold-light);">${safeInit}</strong> — <strong style="font-size:16px;">${formatScore(h.score)} Punkte</strong>
+                                <span style="color:var(--text-muted); font-size:13px;">(${dateStr})</span>
+                            </div>
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                ${photoBtn}
+                                ${verifyBtn}
+                                <button class="btn-report" onclick="deleteHighscore(${h.id}, '${safeFoto}')">Löschen</button>
+                            </div>
+                        </div>
+                        <div id="hs-photo-box-${h.id}" style="margin-top:10px; display:none;"></div>
+                    </div>
+                `;
+            });
+        }
+
+        async function verifyHighscore(hsId) {
+            const target = highscoresDB.find(h => h.id === hsId);
+            if (!target) return;
+
+            const normInit = target.initials.trim().toLowerCase();
+            const existingVerified = highscoresDB.filter(
+                h => h.pinballId === target.pinballId && h.verifiziert && h.id !== hsId && h.initials.trim().toLowerCase() === normInit
+            );
+
+            if (existingVerified.length > 0) {
+                const currentBest = Math.max(...existingVerified.map(s => s.score));
+                if (target.score <= currentBest) {
+                    alert(`Hinweis: Der Spieler "${target.initials}" hat an diesem Gerät bereits einen höheren (oder gleich hohen) verifizierten Rekord (${formatScore(currentBest)} Punkte). Ein niedrigerer Score (${formatScore(target.score)} Punkte) kann den Rekord nicht überschreiben.`);
+                    return;
+                }
+            }
+
+            const { error } = await db.from('highscore').update({ verifiziert: true }).eq('id', hsId);
+            if (error) {
+                alert("Fehler beim Verifizieren: " + error.message);
+                return;
+            }
+
+            await removeOldLowerPlayerScores(target.pinballId, target.initials, hsId, target.score);
+            await refreshCurrentMachineData();
+        }
+
+        async function deleteHighscore(hsId, filePath) {
+            if (!confirm("Diesen Highscore wirklich löschen?")) return;
+            if (filePath) await db.storage.from('fotos-incoming').remove([filePath]);
+            const { error } = await db.from('highscore').delete().eq('id', hsId);
+            if (error) {
+                alert("Fehler beim Löschen: " + error.message);
+                return;
+            }
+            await refreshCurrentMachineData();
+        }
+
+        function renderReports() {
+            const list = document.getElementById('tech-detail-reports');
+            if (!currentPinball) return;
+
+            updateReportStatusTabsUI();
+
+            let filtered = reportsDB
+                .filter(r => r.pinballId === currentPinball.id && r.status === currentReportStatusView)
+                .filter(r => {
+                    const isUnverif = !r.verifiziert || r.prio === 0;
+                    if (isUnverif) return activeReportFilters.u;
+                    if (r.prio === 1) return activeReportFilters[1];
+                    if (r.prio === 2) return activeReportFilters[2];
+                    if (r.prio === 3) return activeReportFilters[3];
+                    return true;
+                });
+
+            const sortVal = document.getElementById('sort-reports').value;
+            filtered.sort((a, b) => {
+                const dateA = new Date(a.date).getTime() || 0;
+                const dateB = new Date(b.date).getTime() || 0;
+                const resA = new Date(a.behobenAm || a.date).getTime() || 0;
+                const resB = new Date(b.behobenAm || b.date).getTime() || 0;
+
+                if (sortVal === 'date-desc') return dateB - dateA;
+                if (sortVal === 'date-asc') return dateA - dateB;
+                if (sortVal === 'resolved-desc') return resB - resA;
+                if (sortVal === 'resolved-asc') return resA - resB;
+
+                if (sortVal === 'prio-asc') {
+                    const pA = a.prio === 0 ? 4 : a.prio;
+                    const pB = b.prio === 0 ? 4 : b.prio;
+                    if (pA !== pB) return b.prio - a.prio;
+                    return dateA - dateB;
+                }
+
+                if (a.verifiziert !== b.verifiziert) return a.verifiziert ? 1 : -1;
+                const prioA = a.prio === 0 ? 0 : a.prio;
+                const prioB = b.prio === 0 ? 0 : b.prio;
+                if (prioA !== prioB) return prioA - prioB;
+                return dateB - dateA;
+            });
+
+            list.innerHTML = '';
+            if (filtered.length === 0) {
+                const emptyText = currentReportStatusView === 'offen'
+                    ? 'Keine offenen Meldungen für die gewählten Filter vorhanden.'
+                    : 'Keine behobenen Meldungen für die gewählten Filter im Archiv vorhanden.';
+                list.innerHTML = `<p style="margin: 10px 0; color: var(--text-muted);"><i>${emptyText}</i></p>`;
+                return;
+            }
+
+            filtered.forEach(r => {
+                const createdStr = formatDateTime(r.date);
+                const resolvedStr = formatDateTime(r.behobenAm || r.date);
+
+                let prioColor, prioBadgeHtml;
+                if (r.prio === 1) {
+                    prioColor = 'var(--status-red)';
+                    prioBadgeHtml = `<span class="badge-prio badge-prio-1">PRIO 1 — UNSPIELBAR</span>`;
+                } else if (r.prio === 2) {
+                    prioColor = 'var(--status-orange)';
+                    prioBadgeHtml = `<span class="badge-prio badge-prio-2">PRIO 2 — SPIELSPAß NEGATIV</span>`;
+                } else if (r.prio === 3) {
+                    prioColor = 'var(--primary-blue)';
+                    prioBadgeHtml = `<span class="badge-prio badge-prio-3">PRIO 3 — KAUM SPÜRBAR</span>`;
+                } else {
+                    prioColor = 'var(--gold-mid)';
+                    prioBadgeHtml = `<span class="badge-prio badge-prio-0">PRIO NOCH OFFEN</span>`;
+                }
+
+                const verifBadgeHtml = r.verifiziert
+                    ? `<span class="badge-verified">Verifiziert</span>`
+                    : `<span class="badge-unverified">UNVERIFIZIERT (Neue Nutzermeldung)</span>`;
+
+                const statusBadgeHtml = r.status === 'behoben'
+                    ? `<span class="badge-resolved">Behoben am ${resolvedStr}</span>`
+                    : '';
+
+                const safeText = r.text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeSolution = r.loesungsweg.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeEmail = r.email.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeFoto = r.foto_url.replace(/'/g, "\\'");
+                const safeSolFoto = r.loesung_foto_url.replace(/'/g, "\\'");
+
+                let photoBtns = [];
+                if (r.foto_url) {
+                    photoBtns.push(`<button id="btn-photo-defect-${r.id}" class="btn-switch" onclick="togglePrivatePhoto('report-photo-box-defect-${r.id}', 'btn-photo-defect-${r.id}', '${safeFoto}', 'Defekt-Foto ansehen', 'Defekt-Foto ausblenden', 'Foto der Meldung')">Defekt-Foto ansehen</button>`);
+                }
+                if (r.loesung_foto_url) {
+                    photoBtns.push(`<button id="btn-photo-solution-${r.id}" class="btn-switch" style="border-color: var(--status-green); color: #7ee787;" onclick="togglePrivatePhoto('report-photo-box-solution-${r.id}', 'btn-photo-solution-${r.id}', '${safeSolFoto}', 'Lösungs-Foto ansehen', 'Lösungs-Foto ausblenden', 'Foto der Lösung')">Lösungs-Foto ansehen</button>`);
+                }
+
+                const solutionBoxHtml = (r.status === 'behoben' && safeSolution)
+                    ? `<div class="report-solution-box"><strong>Dokumentierter Lösungsweg:</strong><br>${safeSolution}</div>`
+                    : '';
+
+                const emailInfoHtml = safeEmail
+                    ? `<div class="report-meta-email">Rückmelde-E-Mail des Melders: <strong style="color:var(--text-main);">${safeEmail}</strong></div>`
+                    : '';
+
+                const editBtnHtml = r.verifiziert
+                    ? `<button class="btn-switch" onclick="openTechReportModal(${r.id})">Bearbeiten</button>`
+                    : `<button class="btn-switch btn-yellow" onclick="openTechReportModal(${r.id})">Verifizieren &amp; Prio setzen</button>`;
+
+                const resolveBtnHtml = r.status === 'offen'
+                    ? `<button class="btn-switch" style="background-color: var(--status-green); color: white; border: none; font-weight: bold;" onclick="openResolveModal(${r.id})">Als behoben markieren</button>`
+                    : '';
+
+                const cardExtraClass = r.status === 'behoben'
+                    ? 'resolved-card'
+                    : (!r.verifiziert ? 'unverified-card' : '');
+
+                list.innerHTML += `
+                    <div class="report-comment ${cardExtraClass}" id="report-card-${r.id}" style="border-left: 5px solid ${r.status === 'behoben' ? 'var(--status-green)' : prioColor};">
+                        <div class="report-header-bar">
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                ${prioBadgeHtml}
+                                ${verifBadgeHtml}
+                                ${statusBadgeHtml}
+                            </div>
+                            <span style="color: var(--text-muted); font-size: 13px;">
+                                Gemeldet am ${createdStr}
+                            </span>
+                        </div>
+
+                        <div class="report-body-text">${safeText}</div>
+                        ${solutionBoxHtml}
+                        ${emailInfoHtml}
+
+                        <div id="report-photo-box-defect-${r.id}" style="margin: 10px 0; display:none;"></div>
+                        <div id="report-photo-box-solution-${r.id}" style="margin: 10px 0; display:none;"></div>
+
+                        <div class="report-actions">
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">${photoBtns.join('')}</div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                ${editBtnHtml}
+                                ${resolveBtnHtml}
+                                <button class="btn-report" onclick="deleteReport(${r.id}, '${safeFoto}', '${safeSolFoto}')">Löschen</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function openTechReportModal(reportId = null) {
+            if (!currentPinball) return;
+            editingReportId = reportId;
+
+            const heading = document.getElementById('modal-report-heading');
+            const prioSelect = document.getElementById('modal-report-prio');
+            const descInput = document.getElementById('modal-report-desc');
+            const fileInput = document.getElementById('modal-report-file');
+            const fileLabel = document.getElementById('modal-file-label');
+            const saveBtn = document.getElementById('modal-save-btn');
+            const statusEl = document.getElementById('modal-report-status');
+
+            statusEl.style.display = 'none';
+            fileInput.value = '';
+
+            if (reportId === null) {
+                heading.innerText = `Neue Meldung für ${currentPinball.name}`;
+                prioSelect.value = '2';
+                descInput.value = '';
+                fileLabel.innerText = 'Foto vom Defekt hochladen (Optional)';
+                saveBtn.innerText = 'Meldung verifiziert eintragen';
+            } else {
+                const target = reportsDB.find(r => r.id === reportId);
+                if (!target) return;
+                heading.innerText = target.verifiziert
+                    ? `Meldung bearbeiten (${currentPinball.name})`
+                    : `Meldung prüfen & verifizieren (${currentPinball.name})`;
+                prioSelect.value = (target.prio >= 1 && target.prio <= 3) ? String(target.prio) : '2';
+                descInput.value = target.text;
+                fileLabel.innerText = target.foto_url
+                    ? 'Neues Foto hochladen (Ersetzt das bisherige Foto, optional)'
+                    : 'Foto vom Defekt hochladen (Optional)';
+                saveBtn.innerText = target.verifiziert ? 'Änderungen speichern' : 'Verifizieren & Speichern';
+            }
+
+            document.getElementById('tech-report-modal').classList.remove('hidden');
+        }
+
+        function closeTechReportModal() {
+            document.getElementById('tech-report-modal').classList.add('hidden');
+            editingReportId = null;
+        }
+
+        function handleModalBackdropClick(event, modalId) {
+            if (event.target.id === modalId) {
+                if (modalId === 'tech-report-modal') closeTechReportModal();
+                if (modalId === 'tech-resolve-modal') closeResolveModal();
+            }
+        }
+
+        async function saveTechReportModal() {
+            if (!currentPinball) return;
+
+            const prioNum = parseInt(document.getElementById('modal-report-prio').value, 10);
+            const desc = document.getElementById('modal-report-desc').value.trim();
+            const fileInput = document.getElementById('modal-report-file');
+
+            const saveBtn = document.getElementById('modal-save-btn');
+            const statusEl = document.getElementById('modal-report-status');
+
+            if (!desc) {
+                alert("Bitte gib eine Beschreibung des Defekts ein!");
+                return;
+            }
+
+            saveBtn.disabled = true;
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--gold-light)';
+            statusEl.innerText = "Speichere...";
+
+            try {
+                const uploadedFilePath = fileInput.files[0]
+                    ? await uploadIncomingPhoto('reports', fileInput.files[0])
+                    : null;
+
+                if (editingReportId === null) {
+                    const { error } = await db.from('reports').insert([{
+                        flipper_id: currentPinball.id,
+                        meldung: desc,
+                        intensitaet: prioNum,
+                        status: 'offen',
+                        verifiziert: true,
+                        email: '',
+                        foto_url: uploadedFilePath || ''
+                    }]);
+                    if (error) throw error;
+                } else {
+                    const existing = reportsDB.find(r => r.id === editingReportId);
+                    const updatePayload = {
+                        intensitaet: prioNum,
+                        meldung: desc,
+                        verifiziert: true
+                    };
+                    if (uploadedFilePath !== null) {
+                        if (existing && existing.foto_url) {
+                            await db.storage.from('fotos-incoming').remove([existing.foto_url]);
+                        }
+                        updatePayload.foto_url = uploadedFilePath;
+                    }
+                    const { error } = await db.from('reports').update(updatePayload).eq('id', editingReportId);
+                    if (error) throw error;
+                }
+
+                saveBtn.disabled = false;
+                closeTechReportModal();
+                await refreshCurrentMachineData();
+            } catch (err) {
+                statusEl.style.color = '#ff7b72';
+                statusEl.innerText = "Fehler beim Speichern: " + err.message;
+                saveBtn.disabled = false;
+            }
+        }
+
+        function openResolveModal(reportId) {
+            resolvingReportId = reportId;
+            document.getElementById('resolve-modal-text').value = '';
+            document.getElementById('resolve-modal-file').value = '';
+            document.getElementById('resolve-modal-status').style.display = 'none';
+            document.getElementById('resolve-modal-save-btn').disabled = false;
+            document.getElementById('tech-resolve-modal').classList.remove('hidden');
+        }
+
+        function closeResolveModal() {
+            document.getElementById('tech-resolve-modal').classList.add('hidden');
+            resolvingReportId = null;
+        }
+
+        async function confirmResolveReport() {
+            if (!resolvingReportId) return;
+
+            const solutionText = document.getElementById('resolve-modal-text').value.trim();
+            const fileInput = document.getElementById('resolve-modal-file');
+            const saveBtn = document.getElementById('resolve-modal-save-btn');
+            const statusEl = document.getElementById('resolve-modal-status');
+
+            saveBtn.disabled = true;
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--gold-light)';
+            statusEl.innerText = "Schließe Meldung ab...";
+
+            try {
+                const solutionPhotoPath = await uploadIncomingPhoto('reports', fileInput.files[0]);
+
+                const updateData = {
+                    status: 'behoben',
+                    behoben_am: new Date().toISOString(),
+                    loesungsweg: solutionText
+                };
+                if (solutionPhotoPath) updateData.loesung_foto_url = solutionPhotoPath;
+
+                const { error } = await db.from('reports').update(updateData).eq('id', resolvingReportId);
+                if (error) throw error;
+
+                saveBtn.disabled = false;
+                closeResolveModal();
+                await refreshCurrentMachineData();
+            } catch (err) {
+                statusEl.style.color = '#ff7b72';
+                statusEl.innerText = "Fehler: " + err.message;
+                saveBtn.disabled = false;
+            }
+        }
+
+        async function deleteReport(reportId, defectFilePath, solutionFilePath = '') {
+            if (!confirm("Möchtest du diesen Report wirklich unwiderruflich löschen?")) return;
+
+            const filesToRemove = [];
+            if (defectFilePath) filesToRemove.push(defectFilePath);
+            if (solutionFilePath) filesToRemove.push(solutionFilePath);
+
+            if (filesToRemove.length > 0) {
+                await db.storage.from('fotos-incoming').remove(filesToRemove);
+            }
+
+            const { error } = await db.from('reports').delete().eq('id', reportId);
+            if (error) {
+                alert("Fehler beim Löschen: " + error.message);
+                return;
+            }
+
+            await refreshCurrentMachineData();
+        }
+
+        async function refreshCurrentMachineData() {
+            await loadAllDatabaseData();
+            if (currentPinball) {
+                currentPinball = pinballs.find(p => p.id === currentPinball.id) || currentPinball;
+                renderTechDetailHeaderAndInfo();
+            }
+            renderCurrentTechTabContent();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const pinId = Number(params.get('id'));
+            const initialTab = params.get('tab') || 'offen';
+
+            await initSharedApp(() => {
+                if (!isLoggedIn) {
+                    window.location.href = 'index.html#login';
+                    return;
+                }
+                currentPinball = pinballs.find(p => p.id === pinId);
+                if (currentPinball) {
+                    renderTechDetailHeaderAndInfo();
+                    renderCurrentTechTabContent();
+                }
+            });
+
+            if (!isLoggedIn) {
+                window.location.href = 'index.html#login';
+                return;
+            }
+            if (!isTechMode) {
+                isTechMode = true;
+                localStorage.setItem('pinplay_tech_mode', 'true');
+                renderSharedHeader();
+            }
+
+            currentPinball = pinballs.find(p => p.id === pinId);
+            if (!currentPinball) {
+                window.location.href = 'techniker.html';
+                return;
+            }
+
+            renderTechDetailHeaderAndInfo();
+            switchReportStatusView(['offen', 'behoben', 'highscore'].includes(initialTab) ? initialTab : 'offen');
+        });
+    </script>
+</body>
+</html>

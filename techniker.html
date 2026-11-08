@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&Play - Techniker Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div id="view-tech-dashboard" class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px;">
+            <h2 style="margin: 0;">Techniker Dashboard: Flipperübersicht</h2>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button id="bulk-pwr-on-btn" class="btn-switch" style="background-color: var(--status-green); color: white; border: none; font-weight: bold;" onclick="setAllMachinesPower(true)">
+                    Alle Aktiven AN
+                </button>
+                <button id="bulk-pwr-off-btn" class="btn-switch" style="background-color: var(--status-red); color: white; border: none; font-weight: bold;" onclick="setAllMachinesPower(false)">
+                    Alle Flipper AUS
+                </button>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th class="sortable-th" onclick="sortTechTable('short')">Kürzel <span id="sort-ind-short" class="sort-indicator"></span></th>
+                    <th class="sortable-th" onclick="sortTechTable('name')">Name des Flippers <span id="sort-ind-name" class="sort-indicator"></span></th>
+                    <th class="sortable-th" style="width: 90px; text-align: center;" onclick="sortTechTable('status')">Status <span id="sort-ind-status" class="sort-indicator"></span></th>
+                    <th class="sortable-th" onclick="sortTechTable('reports')">Offene Meldungen <span id="sort-ind-reports" class="sort-indicator"></span></th>
+                    <th class="sortable-th" onclick="sortTechTable('power')">Power <span id="sort-ind-power" class="sort-indicator"></span></th>
+                    <th>Handbuch</th>
+                </tr>
+            </thead>
+            <tbody id="tech-table-body">
+                <tr><td colspan="6" style="text-align:center;">Lade Daten...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+    <script>
+        let techTableSortCol = 'name';
+        let techTableSortAsc = true;
+
+        function getReportCountsHtml(pinballId) {
+            const openReports = reportsDB.filter(r => r.pinballId === pinballId && r.status === 'offen');
+            if (openReports.length === 0) {
+                return '<span style="color:var(--text-muted);">-</span>';
+            }
+
+            const rCount = openReports.filter(r => r.prio === 1).length;
+            const gCount = openReports.filter(r => r.prio === 2).length;
+            const bCount = openReports.filter(r => r.prio === 3).length;
+            const uCount = openReports.filter(r => !r.prio || r.prio === 0).length;
+
+            let badges = [];
+            if (rCount > 0) badges.push(`<span class="count-r" title="${rCount}x Prio 1 (Unspielbar)">${rCount}</span>`);
+            if (gCount > 0) badges.push(`<span class="count-g" title="${gCount}x Prio 2 (Spielspaß negativ)">${gCount}</span>`);
+            if (bCount > 0) badges.push(`<span class="count-b" title="${bCount}x Prio 3 (Kaum spürbar)">${bCount}</span>`);
+            if (uCount > 0) badges.push(`<span class="count-u" title="${uCount}x Noch unverifiziert">${uCount}</span>`);
+
+            return `<div class="meldungen-counts" onclick="window.location.href='tech-detail.html?id=${pinballId}'">${badges.join('')}</div>`;
+        }
+
+        function getReportSortWeight(pinballId) {
+            const openReports = reportsDB.filter(r => r.pinballId === pinballId && r.status === 'offen');
+            const rCount = openReports.filter(r => r.prio === 1).length;
+            const gCount = openReports.filter(r => r.prio === 2).length;
+            const bCount = openReports.filter(r => r.prio === 3).length;
+            const uCount = openReports.filter(r => !r.prio || r.prio === 0).length;
+            return (rCount * 1000) + (gCount * 100) + (bCount * 10) + uCount;
+        }
+
+        function sortTechTable(columnKey) {
+            if (techTableSortCol === columnKey) {
+                techTableSortAsc = !techTableSortAsc;
+            } else {
+                techTableSortCol = columnKey;
+                techTableSortAsc = true;
+            }
+            renderTechTableBody();
+        }
+
+        function renderTechTableBody() {
+            const tbody = document.getElementById('tech-table-body');
+            if (!tbody) return;
+
+            ['short', 'name', 'status', 'reports', 'power'].forEach(col => {
+                const ind = document.getElementById(`sort-ind-${col}`);
+                if (ind) {
+                    ind.innerText = (techTableSortCol === col) ? (techTableSortAsc ? '▲' : '▼') : '';
+                }
+            });
+
+            const sortedPinballs = [...pinballs].sort((a, b) => {
+                let cmp = 0;
+                if (techTableSortCol === 'short') cmp = a.short.localeCompare(b.short, 'de');
+                else if (techTableSortCol === 'name') cmp = a.name.localeCompare(b.name, 'de');
+                else if (techTableSortCol === 'status') cmp = (a.isAktiv === b.isAktiv) ? 0 : (a.isAktiv ? -1 : 1);
+                else if (techTableSortCol === 'reports') cmp = getReportSortWeight(b.id) - getReportSortWeight(a.id);
+                else if (techTableSortCol === 'power') cmp = (a.power === b.power) ? 0 : (a.power === 'ON' ? -1 : 1);
+                return techTableSortAsc ? cmp : -cmp;
+            });
+
+            tbody.innerHTML = '';
+            sortedPinballs.forEach(p => {
+                const statusColorClass = p.isAktiv ? 'status-box-green' : 'status-box-orange';
+                const statusTooltip = p.isAktiv ? 'Spielbereit (Aktiv)' : 'Wartung (Inaktiv)';
+                const pwrColor = p.power === 'ON' ? '#3fb950' : '#ff7b72';
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong style="color:var(--gold-light);">${p.short}</strong></td>
+                        <td><span class="clickable-name" onclick="window.location.href='tech-detail.html?id=${p.id}'">${p.name}</span></td>
+                        <td><span class="status-color-box ${statusColorClass}" title="${statusTooltip}"></span></td>
+                        <td>${getReportCountsHtml(p.id)}</td>
+                        <td>
+                            <button id="tech-table-pwr-btn-${p.id}" class="btn-switch" onclick="handleTablePowerClick(${p.id})" style="font-weight: bold; color: ${pwrColor};">
+                                ${p.power}
+                            </button>
+                        </td>
+                        <td><button class="btn-yellow">PDF öffnen</button></td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function handleTablePowerClick(pinballId) {
+            const btn = document.getElementById(`tech-table-pwr-btn-${pinballId}`);
+            await togglePinballPower(pinballId, btn, (updatedPin) => {
+                if (btn) {
+                    btn.innerText = updatedPin.power;
+                    btn.style.color = updatedPin.power === 'ON' ? '#3fb950' : '#ff7b72';
+                }
+            });
+        }
+
+        async function setAllMachinesPower(turnOn) {
+            const targetPins = turnOn ? pinballs.filter(p => p.isAktiv) : pinballs;
+            const targetIds = targetPins.map(p => p.id);
+            if (targetIds.length === 0) return;
+
+            const btnOn = document.getElementById('bulk-pwr-on-btn');
+            const btnOff = document.getElementById('bulk-pwr-off-btn');
+            btnOn.disabled = true;
+            btnOff.disabled = true;
+
+            const { error } = await db.from('flipper').update({ an: turnOn }).in('id', targetIds);
+
+            btnOn.disabled = false;
+            btnOff.disabled = false;
+
+            if (error) {
+                alert("Fehler beim globalen Schalten: " + error.message);
+                return;
+            }
+
+            targetPins.forEach(p => {
+                p.power = turnOn ? 'ON' : 'OFF';
+                const tableBtn = document.getElementById(`tech-table-pwr-btn-${p.id}`);
+                if (tableBtn) {
+                    tableBtn.innerText = p.power;
+                    tableBtn.style.color = turnOn ? '#3fb950' : '#ff7b72';
+                }
+            });
+            saveStateToCache();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => renderTechTableBody());
+            if (!isLoggedIn) {
+                window.location.href = 'index.html#login';
+                return;
+            }
+            if (!isTechMode) {
+                isTechMode = true;
+                localStorage.setItem('pinplay_tech_mode', 'true');
+                renderSharedHeader();
+            }
+            renderTechTableBody();
+        });
+    </script>
+</body>
+</html>
