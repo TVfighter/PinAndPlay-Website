@@ -13,12 +13,12 @@
     <div id="view-user-detail" class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="window.location.href='index.html'" title="Zurück zur Übersicht">←</button>
+                <button class="btn-back" onclick="goBackFromDetail()" title="Zurück">←</button>
                 <h2 id="detail-title" style="margin: 0;">Lade Flipper...</h2>
             </div>
             <div class="detail-header-actions">
                 <button class="btn-power" id="detail-power" onclick="handleDetailPowerClick()">ON</button>
-                <button class="btn-report" id="detail-report-btn" onclick="openUserReportView()">Defekt melden</button>
+                <button class="btn-report" id="detail-report-btn" onclick="openUserReportView()">Flipper melden</button>
             </div>
         </div>
 
@@ -67,6 +67,16 @@
     <script src="app.js"></script>
     <script>
         let currentPinball = null;
+
+        function goBackFromDetail() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('from') === 'highscores') {
+                const idParam = currentPinball ? `?id=${currentPinball.id}` : '';
+                window.location.href = `highscores.html${idParam}`;
+            } else {
+                window.location.href = 'index.html';
+            }
+        }
 
         function renderDetailView() {
             if (!currentPinball) return;

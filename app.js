@@ -190,10 +190,11 @@ function toggleTechMode() {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
+    const fromSuffix = params.get('from') ? `&from=${params.get('from')}` : '';
 
     if (isTechMode) {
         if (path.endsWith('detail.html') && id) {
-            window.location.href = `tech-detail.html?id=${id}`;
+            window.location.href = `tech-detail.html?id=${id}${fromSuffix}`;
         } else if (path.endsWith('highscores.html')) {
             window.location.reload();
         } else {
@@ -201,7 +202,7 @@ function toggleTechMode() {
         }
     } else {
         if (path.endsWith('tech-detail.html') && id) {
-            window.location.href = `detail.html?id=${id}`;
+            window.location.href = `detail.html?id=${id}${fromSuffix}`;
         } else if (path.endsWith('highscores.html')) {
             window.location.reload();
         } else {

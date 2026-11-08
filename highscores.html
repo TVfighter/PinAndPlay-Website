@@ -22,7 +22,7 @@
         </div>
 
         <h3 style="margin-top: 0; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">Top Scores aller Flipper (Grand Champions)</h3>
-        <table>
+        <table class="hs-champions-table">
             <thead>
                 <tr>
                     <th>Flipper</th>
@@ -37,10 +37,10 @@
         <h3 style="margin-top: 35px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">Alle verifizierten Scores an einem Gerät</h3>
         <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
             <label for="leaderboard-pinball-select"><strong>Flipper wählen:</strong></label>
-            <select id="leaderboard-pinball-select" onchange="renderMachineLeaderboard()" style="padding: 9px 12px; border-radius: 5px; border: 1px solid var(--border-light); background: var(--surface-input); color: var(--text-main); font-size: 15px; min-width: 240px;"></select>
+            <select id="leaderboard-pinball-select" onchange="renderMachineLeaderboard()" style="padding: 9px 12px; border-radius: 5px; border: 1px solid var(--border-light); background: var(--surface-input); color: var(--text-main); font-size: 15px; min-width: 220px; flex: 1; max-width: 340px;"></select>
             <span id="hs-single-inactive-badge" class="badge-inactive-warn hidden">Hinweis: Dieser Flipper ist derzeit außer Betrieb</span>
         </div>
-        <table>
+        <table class="hs-single-table">
             <thead>
                 <tr>
                     <th style="width: 80px;">Platz</th>
@@ -133,14 +133,18 @@
                     : `<span class="badge-inactive-icon" title="${p.name} ist derzeit außer Betrieb (Keine Highscore-Eintragung möglich)">!</span>`;
 
                 const techUnverifBadgeHtml = hasUnverifiedForTech
-                    ? `<span class="badge-unverified-hs" onclick="window.location.href='tech-detail.html?id=${p.id}&tab=highscore'" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} im Techniker-Menü zu prüfen">${unverifiedHsCount} unverifiziert</span>`
+                    ? `<span class="badge-unverified-hs" onclick="window.location.href='tech-detail.html?id=${p.id}&tab=highscore&from=highscores'" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} im Techniker-Menü zu prüfen">${unverifiedHsCount} unverifiziert</span>`
                     : '';
+
+                const detailTargetUrl = isTechMode
+                    ? `tech-detail.html?id=${p.id}&from=highscores`
+                    : `detail.html?id=${p.id}&from=highscores`;
 
                 const rowClass = hasUnverifiedForTech ? 'unverified-hs-row' : '';
 
                 allTbody.innerHTML += `
                     <tr class="${rowClass}">
-                        <td><strong>${p.name}</strong>${techUnverifBadgeHtml}</td>
+                        <td><span class="clickable-name" onclick="window.location.href='${detailTargetUrl}'">${p.name}</span>${techUnverifBadgeHtml}</td>
                         <td>${holderText}</td>
                         <td>${scoreText}</td>
                         <td>

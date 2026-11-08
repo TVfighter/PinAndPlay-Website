@@ -44,6 +44,7 @@ body {
     background-image: radial-gradient(circle at 50% 0%, #1c1e26 0%, #0d0e11 75%);
     background-attachment: fixed;
     color: var(--text-main);
+    overflow-x: hidden;
 }
 
 textarea {
@@ -105,7 +106,6 @@ header.tech-mode {
     transition: all 0.2s;
 }
 
-/* Inaktiver Navigations-Knopf im Banner: Gelb */
 .btn-nav-page {
     background-color: var(--accent-yellow-bg);
     color: var(--accent-yellow-hover);
@@ -118,7 +118,6 @@ header.tech-mode {
     transform: translateY(-1px);
 }
 
-/* Aktiver Tab im Banner: Kräftiges Gelb mit goldenem Deko-Glanzrahmen */
 .btn-nav-active {
     background-color: var(--accent-yellow);
     color: #111;
@@ -126,7 +125,6 @@ header.tech-mode {
     box-shadow: 0 0 12px var(--gold-glow);
 }
 
-/* Dezenter System-Knopf im Header (z.B. Logout) */
 .btn-nav-util {
     background-color: var(--surface-elevated);
     color: var(--text-muted);
@@ -137,7 +135,6 @@ header.tech-mode {
     border-color: var(--status-red);
 }
 
-/* Gelber Navigations-Stil für Seiten-Links im Inhalt (z.B. Alle Scores ansehen, PDF) */
 .btn-yellow {
     background-color: var(--accent-yellow-bg) !important;
     color: var(--accent-yellow-hover) !important;
@@ -154,7 +151,6 @@ header.tech-mode {
     border-color: var(--accent-yellow-hover) !important;
 }
 
-/* Grüner Stil für alle Eintragen- & Absenden-Knöpfe (Meldungen, Highscores, Feedback) */
 .btn-green {
     background-color: var(--status-green) !important;
     color: #fff !important;
@@ -182,6 +178,7 @@ header.tech-mode {
     border: 1px solid var(--gold-border);
     border-radius: 8px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    box-sizing: border-box;
 }
 .hidden { display: none !important; }
 
@@ -190,7 +187,7 @@ h2, h3 {
     letter-spacing: 0.5px;
 }
 
-/* Flipper-Karten im Grid (Goldene Deko-Rahmen beim Hover) */
+/* Flipper-Karten im Grid */
 .grid-overview {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -245,7 +242,6 @@ h2, h3 {
 .detail-header-left { display: flex; align-items: center; gap: 14px; }
 .detail-header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-/* Zurück-Button: Gleiche Knopfgröße (40x40), größeres Pfeil-Symbol (28px), erst beim Hover gelb */
 .btn-back {
     background-color: var(--surface-elevated);
     color: var(--text-main);
@@ -365,7 +361,6 @@ h2, h3 {
 }
 .btn-status-tech:hover { border-color: var(--gold-mid); }
 
-/* '+' Highscore-Eintragen-Knopf: Grün (da Eintragen-Aktion) */
 .btn-add-score {
     background-color: var(--status-green);
     color: #fff;
@@ -435,7 +430,6 @@ h2, h3 {
 .rank-2 { background: linear-gradient(135deg, #7d828a, #d0d5dd, #8b9098); color: #111; }
 .rank-3 { background: linear-gradient(135deg, #6e4223, #b87333, #7a4928); color: #fff; }
 
-/* Markierung für Flipper mit unverifizierten Highscores (Navigiert zur Prüfung -> Gelb) */
 tr.unverified-hs-row { background-color: rgba(234, 179, 8, 0.07); }
 tr.unverified-hs-row td:first-child { border-left: 4px solid var(--accent-yellow); }
 .badge-unverified-hs {
@@ -456,7 +450,7 @@ tr.unverified-hs-row td:first-child { border-left: 4px solid var(--accent-yellow
     color: #111;
 }
 
-/* Tabellen (Goldene Deko-Kopfzeile) */
+/* Tabellen (Desktop-Standard) */
 table { width: 100%; border-collapse: collapse; margin-top: 15px; }
 th, td {
     border: 1px solid var(--border-subtle);
@@ -484,11 +478,9 @@ th.sortable-th:hover { background-color: #282c36; color: var(--gold-light); }
 .status-rot { color: #f85149; font-weight: bold; }
 .status-orange { color: var(--accent-yellow-hover); font-weight: bold; }
 
-/* Klickbarer Flippername in der Techniker-Tabelle (führt auf eine Seite -> Gelber Unterstrich/Hover) */
 .clickable-name { color: var(--text-main); font-weight: bold; text-decoration: underline; text-decoration-color: var(--accent-yellow); cursor: pointer; }
 .clickable-name:hover { color: var(--accent-yellow-hover); }
 
-/* Farbiges Status-Feld ohne Text in der Techniker-Tabelle */
 .status-color-box { width: 100%; min-width: 48px; height: 24px; border-radius: 4px; display: block; border: 1px solid rgba(255,255,255,0.15); }
 .status-box-green { background-color: var(--status-green); }
 .status-box-orange { background-color: var(--status-orange); }
@@ -613,7 +605,6 @@ th.sortable-th:hover { background-color: #282c36; color: var(--gold-light); }
 .pill-p2 { background: rgba(212, 148, 42, 0.18); color: #f0b754; border-color: var(--status-orange); }
 .pill-p3 { background: rgba(56, 139, 253, 0.18); color: #79c0ff; border-color: var(--primary-blue); }
 
-/* Sortier-Dropdown & GRÜNER Hinzufügen-Knopf (+ Neue Meldung / + Neuer Highscore) */
 .sort-and-action-group { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .bold-sort-select {
     padding: 10px 12px !important;
@@ -649,7 +640,6 @@ th.sortable-th:hover { background-color: #282c36; color: var(--gold-light); }
     box-shadow: 0 4px 12px rgba(46, 160, 67, 0.35);
 }
 
-/* Banner & Listen-Rahmen für Archiv und Highscores */
 .resolved-archive-banner {
     background: rgba(46, 160, 67, 0.14);
     color: #7ee787;
@@ -793,7 +783,7 @@ th.sortable-th:hover { background-color: #282c36; color: var(--gold-light); }
 }
 
 /* Farbige Meldungs-Zähler in der Techniker-Übersicht */
-.meldungen-counts { display: inline-flex; gap: 6px; align-items: center; font-weight: bold; font-size: 13px; cursor: pointer; }
+.meldungen-counts { display: inline-flex; gap: 6px; align-items: center; font-weight: bold; font-size: 13px; cursor: pointer; flex-wrap: wrap; }
 .count-r { color: white; background: var(--status-red); padding: 2px 8px; border-radius: 4px; min-width: 14px; text-align: center; }
 .count-g { color: #111; background: var(--status-orange); padding: 2px 8px; border-radius: 4px; min-width: 14px; text-align: center; }
 .count-b { color: white; background: var(--primary-blue); padding: 2px 8px; border-radius: 4px; min-width: 14px; text-align: center; }
@@ -821,10 +811,273 @@ th.sortable-th:hover { background-color: #282c36; color: var(--gold-light); }
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.7);
     max-height: 90vh;
     overflow-y: auto;
+    box-sizing: border-box;
 }
 
+/* ==========================================================================
+   HANDY- & SMARTPHONE-OPTIMIERUNG (Alle Tabellen passen ohne Scrollen)
+   ========================================================================== */
 @media (max-width: 768px) {
     .detail-top-section { flex-direction: column; }
-    .detail-header { flex-direction: column; align-items: flex-start; gap: 15px; }
-    .georg-text-container { column-count: 1; }
+    .detail-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .detail-header-actions { width: 100%; justify-content: flex-start; }
+    .georg-text-container { column-count: 1; padding: 15px; }
+}
+
+@media (max-width: 680px) {
+    header {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .logo-img {
+        height: 38px;
+    }
+    .quick-actions {
+        width: 100%;
+        gap: 6px;
+    }
+    .quick-actions button {
+        flex: 1 1 auto;
+        padding: 8px 8px;
+        font-size: 11px;
+        text-align: center;
+    }
+
+    .container {
+        margin: 10px 8px;
+        padding: 14px 12px;
+    }
+    h2 { font-size: 19px; }
+    h3 { font-size: 16px; }
+
+    .grid-overview {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+    .flipper-card { padding: 10px; }
+    .flipper-card .placeholder-img { height: 120px; }
+    .flipper-card h3 { font-size: 15px; }
+    .placeholder-img-large { height: 210px; }
+
+    .report-mode-tabs { gap: 8px; }
+    .report-tab-btn {
+        min-width: 100%;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+    .sort-and-action-group {
+        width: 100%;
+    }
+    .sort-and-action-group > div {
+        flex: 1 1 100%;
+    }
+    .bold-sort-select {
+        width: 100%;
+        min-width: 0;
+    }
+    .btn-context-add {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* 1. TECHNIKER-TABELLE (.tech-table) AUF DEM HANDY:
+       Kopfzeile wird zur kompakten Sortier-Leiste, Zeilen werden zu 2-zeiligen Karten */
+    table.tech-table,
+    table.tech-table tbody {
+        display: block;
+        width: 100%;
+    }
+    table.tech-table thead {
+        display: block;
+        margin-bottom: 12px;
+    }
+    table.tech-table thead tr {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        background: var(--surface-elevated);
+        padding: 8px;
+        border: 1px solid var(--gold-border);
+        border-radius: 6px;
+    }
+    table.tech-table thead tr::before {
+        content: "Sortieren:";
+        width: 100%;
+        font-size: 11px;
+        font-weight: bold;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        margin-bottom: 2px;
+    }
+    table.tech-table thead th {
+        flex: 1 1 auto;
+        width: auto !important;
+        padding: 6px 8px;
+        font-size: 11px;
+        border: 1px solid var(--border-light);
+        border-radius: 4px;
+        text-align: center;
+    }
+    /* Spalte 'Handbuch' ist nicht sortierbar -> in der mobilen Sortier-Leiste ausblenden */
+    table.tech-table thead th:last-child {
+        display: none;
+    }
+
+    table.tech-table tbody tr {
+        display: grid;
+        grid-template-columns: auto 1fr auto auto;
+        gap: 8px 10px;
+        align-items: center;
+        padding: 12px;
+        margin-bottom: 10px;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+    }
+    table.tech-table tbody td {
+        border: none;
+        padding: 0;
+    }
+    table.tech-table tbody td[colspan] {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 12px;
+    }
+    /* Zeile 1 der Karte: Kürzel | Name | Status-Box */
+    table.tech-table tbody td:nth-child(1) {
+        grid-column: 1;
+        grid-row: 1;
+        background: var(--surface-input);
+        padding: 3px 7px;
+        border-radius: 4px;
+        border: 1px solid var(--border-light);
+        font-size: 12px;
+    }
+    table.tech-table tbody td:nth-child(2) {
+        grid-column: 2 / 4;
+        grid-row: 1;
+        font-size: 15px;
+        word-break: break-word;
+    }
+    table.tech-table tbody td:nth-child(3) {
+        grid-column: 4;
+        grid-row: 1;
+        justify-self: end;
+    }
+    table.tech-table .status-color-box {
+        min-width: 32px;
+        width: 32px;
+        height: 22px;
+    }
+    /* Zeile 2 der Karte: Offene Meldungen | Power-Button | PDF-Button */
+    table.tech-table tbody td:nth-child(4) {
+        grid-column: 1 / 3;
+        grid-row: 2;
+        padding-top: 8px;
+        border-top: 1px dashed var(--border-subtle);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 32px;
+    }
+    table.tech-table tbody td:nth-child(4)::before {
+        content: "Meldungen:";
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+    table.tech-table tbody td:nth-child(5) {
+        grid-column: 3;
+        grid-row: 2;
+        padding-top: 8px;
+        border-top: 1px dashed var(--border-subtle);
+        justify-self: end;
+    }
+    table.tech-table tbody td:nth-child(6) {
+        grid-column: 4;
+        grid-row: 2;
+        padding-top: 8px;
+        border-top: 1px dashed var(--border-subtle);
+        justify-self: end;
+    }
+    table.tech-table tbody td button {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    /* 2. HIGHSCORE GRAND-CHAMPIONS-TABELLE (.hs-champions-table) AUF DEM HANDY */
+    table.hs-champions-table,
+    table.hs-champions-table tbody {
+        display: block;
+        width: 100%;
+    }
+    table.hs-champions-table thead {
+        display: none;
+    }
+    table.hs-champions-table tbody tr {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px 10px;
+        align-items: center;
+        padding: 12px;
+        margin-bottom: 10px;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+    }
+    table.hs-champions-table tbody td {
+        border: none;
+        padding: 0;
+    }
+    table.hs-champions-table tbody td:nth-child(1) {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        font-size: 15px;
+        padding-bottom: 6px;
+        border-bottom: 1px dashed var(--border-subtle);
+        word-break: break-word;
+    }
+    table.hs-champions-table tbody td:nth-child(2) {
+        grid-column: 1;
+        grid-row: 2;
+        font-size: 13px;
+        padding-top: 2px;
+    }
+    table.hs-champions-table tbody td:nth-child(2)::before {
+        content: "Rekordhalter: ";
+        color: var(--text-muted);
+        font-size: 12px;
+    }
+    table.hs-champions-table tbody td:nth-child(3) {
+        grid-column: 1;
+        grid-row: 3;
+        font-size: 14px;
+    }
+    table.hs-champions-table tbody td:nth-child(3)::before {
+        content: "Punkte: ";
+        color: var(--text-muted);
+        font-size: 12px;
+    }
+    table.hs-champions-table tbody td:nth-child(4) {
+        grid-column: 2;
+        grid-row: 2 / 4;
+        justify-self: end;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    table.hs-champions-table tbody td:nth-child(4) .btn-yellow {
+        padding: 7px 10px;
+        font-size: 12px;
+    }
+
+    /* 3. EINZELGERÄT-RANGLISTE (.hs-single-table) AUF DEM HANDY */
+    table.hs-single-table th,
+    table.hs-single-table td {
+        padding: 8px 6px;
+        font-size: 13px;
+    }
+    table.hs-single-table th:first-child,
+    table.hs-single-table td:first-child {
+        width: 44px !important;
+    }
 }

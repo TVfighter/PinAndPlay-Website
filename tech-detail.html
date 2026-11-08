@@ -12,7 +12,7 @@
     <div id="view-tech-detail" class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="window.location.href='techniker.html'" title="Zurück zur Techniker-Übersicht">←</button>
+                <button class="btn-back" onclick="goBackFromTechDetail()" title="Zurück">←</button>
                 <h2 id="tech-detail-title" style="margin: 0;">Lade Flipper...</h2>
             </div>
             <div class="detail-header-actions">
@@ -133,7 +133,7 @@
                 <label><strong id="modal-file-label">Foto vom Defekt hochladen (Optional)</strong></label><br>
                 <input type="file" id="modal-report-file" accept="image/*" style="margin-bottom: 15px; border: none; padding: 0;">
 
-                <button id="modal-save-btn" class="btn-report btn-yellow" style="width: 100%; padding: 14px;" onclick="saveTechReportModal()">
+                <button id="modal-save-btn" class="btn-green" style="width: 100%; padding: 14px;" onclick="saveTechReportModal()">
                     Speichern &amp; Verifizieren
                 </button>
                 <p id="modal-report-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
@@ -159,7 +159,7 @@
                 <label><strong>Foto zur Lösung hinzufügen (Optional)</strong></label><br>
                 <input type="file" id="resolve-modal-file" accept="image/*" style="margin-bottom: 15px; border: none; padding: 0;">
 
-                <button id="resolve-modal-save-btn" class="btn-report btn-yellow" style="width: 100%; padding: 14px;" onclick="confirmResolveReport()">
+                <button id="resolve-modal-save-btn" class="btn-green" style="width: 100%; padding: 14px;" onclick="confirmResolveReport()">
                     Jetzt als behoben abschließen
                 </button>
                 <p id="resolve-modal-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
@@ -199,6 +199,16 @@
                 { value: 'hs-date-asc', label: 'Datum: Älteste zuerst' }
             ]
         };
+
+        function goBackFromTechDetail() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('from') === 'highscores') {
+                const idParam = currentPinball ? `?id=${currentPinball.id}` : '';
+                window.location.href = `highscores.html${idParam}`;
+            } else {
+                window.location.href = 'techniker.html';
+            }
+        }
 
         function renderTechDetailHeaderAndInfo() {
             if (!currentPinball) return;
@@ -398,7 +408,7 @@
                     : '';
 
                 const verifyBtn = !h.verifiziert
-                    ? `<button class="btn-switch btn-yellow" onclick="verifyHighscore(${h.id})">Verifizieren</button>`
+                    ? `<button class="btn-green" onclick="verifyHighscore(${h.id})">Verifizieren</button>`
                     : '';
 
                 container.innerHTML += `
@@ -562,10 +572,10 @@
 
                 const editBtnHtml = r.verifiziert
                     ? `<button class="btn-switch" onclick="openTechReportModal(${r.id})">Bearbeiten</button>`
-                    : `<button class="btn-switch btn-yellow" onclick="openTechReportModal(${r.id})">Verifizieren &amp; Prio setzen</button>`;
+                    : `<button class="btn-green" onclick="openTechReportModal(${r.id})">Verifizieren &amp; Prio setzen</button>`;
 
                 const resolveBtnHtml = r.status === 'offen'
-                    ? `<button class="btn-switch" style="background-color: var(--status-green); color: white; border: none; font-weight: bold;" onclick="openResolveModal(${r.id})">Als behoben markieren</button>`
+                    ? `<button class="btn-green" onclick="openResolveModal(${r.id})">Als behoben markieren</button>`
                     : '';
 
                 const cardExtraClass = r.status === 'behoben'
