@@ -130,6 +130,7 @@
 
         function openUserReportView() {
             if (!currentPinball) return;
+            if (!ensureWritePermission()) return;
             if (!isTechMode && !currentPinball.isAktiv) {
                 alert("Dieser Flipper befindet sich derzeit in Wartung (Inaktiv) und kann nicht gemeldet werden.");
                 return;

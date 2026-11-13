@@ -1,13 +1,34 @@
-// Supabase initialisieren
+// 1. Tages-Token aus QR-Code-Scan (?token=...) sofort auslesen und speichern
+const DAILY_TOKEN_KEY = 'pinplay_daily_token';
+(function captureQrTokenFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const scannedToken = params.get('token');
+    if (scannedToken && scannedToken.trim() !== '') {
+        localStorage.setItem(DAILY_TOKEN_KEY, scannedToken.trim().toUpperCase());
+        params.delete('token');
+        const cleanQuery = params.toString();
+        const cleanUrl = window.location.pathname + (cleanQuery ? `?${cleanQuery}` : '') + window.location.hash;
+        window.history.replaceState({}, '', cleanUrl);
+    }
+})();
+
+// Supabase initialisieren (inkl. Übergabe des gespeicherten Tages-Tokens im Header)
 const supabaseUrl = 'https://gwvxctkowtiyfrhoozhj.supabase.co';
 const supabaseKey = 'sb_publishable__H6Yjq1-Tift6S7NHxSGcw_ihus2Zbw';
-const db = window.supabase.createClient(supabaseUrl, supabaseKey);
+const currentDailyToken = localStorage.getItem(DAILY_TOKEN_KEY) || '';
+const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
+    global: {
+        headers: {
+            'x-pinplay-token': currentDailyToken
+        }
+    }
+});
 
 // Ziel-URL für das Pin&Play-Logo (Offizielle Homepage)
 const OFFICIAL_HOMEPAGE_URL = 'index.html';
 
 // Schlüssel für den dauerhaften Browser-Speicher
-const CACHE_KEY_STATE = 'pinplay_full_data_cache_v4';
+const CACHE_KEY_STATE = 'pinplay_full_data_cache_v5';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Globale Variablen
@@ -18,6 +39,7 @@ let feedbackDB = [];
 let playersDB = [];
 let isLoggedIn = false;
 let isTechMode = false;
+let hasValidDailyToken = false;
 
 function formatScore(num) {
     return Number(num || 0).toLocaleString('de-DE');
@@ -64,21 +86,31 @@ function stylePowerButton(btnElement, powerState) {
     btnElement.style.borderColor = powerState === 'ON' ? '#2ea043' : '#cf3432';
 }
 
-// --- SPIELER-ALIAS-VERKNÜPFUNG ("Val" <-> "Valentin" <-> "TVfighter") ---
+// Prüft vor dem Eintragen (Highscore, Defekt, Feedback), ob ein gültiger Tages-QR-Code gescannt wurde
+function ensureWritePermission() {
+    if (isLoggedIn || isTechMode || hasValidDailyToken) {
+        return true;
+    }
+    alert("Zugangssperre: Um Highscores, Defekte oder Feedback einzureichen, scanne bitte zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!");
+    return false;
+}
+
+// --- SPIELER-ALIAS & FLIPPER-SPEZIFISCHE NAMENS-VERKNÜPFUNG ---
 
 function resolvePlayerProfile(rawInput) {
     if (!rawInput) return null;
     const norm = String(rawInput).trim().toUpperCase();
     if (!norm) return null;
 
-    return playersDB.find(pl =>
-        pl.displayName.toUpperCase() === norm ||
-        pl.shortInitials.toUpperCase() === norm ||
-        pl.aliases.some(a => a.toUpperCase() === norm)
-    ) || null;
+    return playersDB.find(pl => {
+        if (pl.displayName.toUpperCase() === norm) return true;
+        if (pl.shortInitials.toUpperCase() === norm) return true;
+        if (pl.aliases.some(a => a.toUpperCase() === norm)) return true;
+        if (pl.flipperTags && Object.values(pl.flipperTags).some(v => String(v).toUpperCase() === norm)) return true;
+        return false;
+    }) || null;
 }
 
-// Prüft, ob zwei eingetragene Namen/Initialen zur selben Person gehören
 function isSamePlayerIdentity(nameA, nameB) {
     const normA = String(nameA || '').trim().toUpperCase();
     const normB = String(nameB || '').trim().toUpperCase();
@@ -87,10 +119,29 @@ function isSamePlayerIdentity(nameA, nameB) {
 
     const profA = resolvePlayerProfile(normA);
     const profB = resolvePlayerProfile(normB);
-    return (profA && profB && profA.id === profB.id);
+    return !!(profA && profB && profA.id === profB.id);
 }
 
-// Gibt den passend zur Flipper-Zeichenlänge formatierten Namen eines Spielers zurück
+// Ermittelt den genauen Namen, den ein Spielerprofil an einem bestimmten Flipper nutzt
+function getProfileNameForPinball(prof, pin) {
+    if (!prof || !pin) return '';
+    const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
+
+    // 1. Alle Flipper mit max. 3 Zeichen (inkl. 0) nutzen immer das 3er-Standardkürzel
+    if (effectiveMaxLen <= 3) {
+        return (prof.shortInitials || prof.displayName).toUpperCase().substring(0, 3);
+    }
+
+    // 2. Bei längeren Namen (z.B. Stern vs. JJP): Prüfen, ob für diesen Flipper ein eigener Name hinterlegt ist
+    const customForPin = prof.flipperTags ? prof.flipperTags[String(pin.id)] : null;
+    if (customForPin && String(customForPin).trim() !== '') {
+        return String(customForPin).trim().toUpperCase().substring(0, effectiveMaxLen);
+    }
+
+    // 3. Fallback für lange Flipper ohne Sondereintrag: Haupt-Anzeigename
+    return prof.displayName.toUpperCase().substring(0, effectiveMaxLen);
+}
+
 function getFormattedPlayerDisplay(rawInitials) {
     const prof = resolvePlayerProfile(rawInitials);
     if (!prof) return rawInitials;
@@ -106,6 +157,7 @@ function getActiveNavTab() {
     const path = window.location.pathname;
     if (path.endsWith('highscores.html') || path.endsWith('/highscores')) return 'highscores';
     if (path.endsWith('tech-feedback.html') || path.endsWith('/tech-feedback')) return 'tech-feedback';
+    if (path.endsWith('tech-players.html') || path.endsWith('/tech-players')) return 'tech-players';
     return 'overview';
 }
 
@@ -120,10 +172,14 @@ function renderSharedHeader() {
     const overviewClass = activeTab === 'overview' ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
     const highscoresClass = activeTab === 'highscores' ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
     const techFeedbackClass = activeTab === 'tech-feedback' ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
+    const techPlayersClass = activeTab === 'tech-players' ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
 
     const fbCountSuffix = feedbackDB.length > 0 ? ` (${feedbackDB.length})` : '';
-    const techFeedbackBtnHtml = (isLoggedIn && isTechMode)
-        ? `<button class="${techFeedbackClass}" onclick="window.location.href='tech-feedback.html'">Spieler-Feedback${fbCountSuffix}</button>`
+    const techExtraBtnsHtml = (isLoggedIn && isTechMode)
+        ? `
+            <button class="${techPlayersClass}" onclick="window.location.href='tech-players.html'">Kürzel &amp; QR-Code</button>
+            <button class="${techFeedbackClass}" onclick="window.location.href='tech-feedback.html'">Spieler-Feedback${fbCountSuffix}</button>
+        `
         : '';
 
     header.innerHTML = `
@@ -133,7 +189,7 @@ function renderSharedHeader() {
         <div class="quick-actions">
             <button class="${overviewClass}" onclick="goHome()">Flipper Übersicht</button>
             <button class="${highscoresClass}" onclick="window.location.href='highscores.html'">Highscores</button>
-            ${techFeedbackBtnHtml}
+            ${techExtraBtnsHtml}
             <button class="btn-nav-page" onclick="toggleTechMode()" id="tech-toggle" style="display: ${isLoggedIn ? 'inline-block' : 'none'};">
                 Techniker Modus: ${isTechMode ? 'AN' : 'AUS'}
             </button>
@@ -258,6 +314,7 @@ function saveStateToCache() {
             highscoresDB,
             feedbackDB,
             playersDB,
+            hasValidDailyToken,
             timestamp: Date.now()
         }));
     } catch (e) {}
@@ -274,11 +331,33 @@ function restoreStateFromCache() {
             highscoresDB = parsed.highscoresDB || [];
             feedbackDB = parsed.feedbackDB || [];
             playersDB = parsed.playersDB || [];
+            hasValidDailyToken = parsed.hasValidDailyToken === true;
             const age = Date.now() - (parsed.timestamp || 0);
             return { loaded: true, isFresh: age < CACHE_TTL_MS };
         }
     } catch (e) {}
     return { loaded: false, isFresh: false };
+}
+
+async function verifyDailyTokenStatus() {
+    if (isLoggedIn) {
+        hasValidDailyToken = true;
+        return;
+    }
+    const token = localStorage.getItem(DAILY_TOKEN_KEY) || '';
+    if (!token) {
+        hasValidDailyToken = false;
+        return;
+    }
+    try {
+        const { data, error } = await db.rpc('check_my_daily_token', { p_token: token });
+        hasValidDailyToken = !error && data === true;
+        if (!hasValidDailyToken) {
+            localStorage.removeItem(DAILY_TOKEN_KEY);
+        }
+    } catch (e) {
+        hasValidDailyToken = false;
+    }
 }
 
 async function initSharedApp(onBackgroundUpdate = null) {
@@ -289,6 +368,7 @@ async function initSharedApp(onBackgroundUpdate = null) {
     checkHashLogin();
 
     if (cacheStatus.loaded) {
+        verifyDailyTokenStatus();
         if (!cacheStatus.isFresh) {
             (async () => {
                 await syncSessionInBackground();
@@ -303,6 +383,7 @@ async function initSharedApp(onBackgroundUpdate = null) {
     }
 
     await syncSessionInBackground();
+    await verifyDailyTokenStatus();
     await loadAllDatabaseData();
     renderSharedHeader();
 }
@@ -320,6 +401,7 @@ async function syncSessionInBackground() {
                 feedbackDB = [];
             } else {
                 localStorage.setItem('pinplay_logged_in', 'true');
+                hasValidDailyToken = true;
             }
             renderSharedHeader();
         }
@@ -332,7 +414,7 @@ async function loadAllDatabaseData() {
         db.from('designer').select('*'),
         db.from('reports').select('*'),
         db.from('highscore').select('*').order('score', { ascending: false }),
-        db.from('players').select('*')
+        db.from('players').select('*').order('display_name', { ascending: true })
     ];
 
     if (isLoggedIn) {
@@ -347,15 +429,14 @@ async function loadAllDatabaseData() {
     const dbPlayers = results[4] && !results[4].error ? results[4].data : [];
     const dbFb = results[5] ? results[5].data : [];
 
-
-   playersDB = (dbPlayers || []).map(pl => ({
+    playersDB = (dbPlayers || []).map(pl => ({
         id: pl.id,
         displayName: pl.display_name || '',
         shortInitials: (pl.short_tag || pl.short_initials || '').toUpperCase(),
         aliases: Array.isArray(pl.aliases) ? pl.aliases.map(a => String(a).toUpperCase()) : [],
+        flipperTags: (pl.flipper_tags && typeof pl.flipper_tags === 'object') ? pl.flipper_tags : {},
         hasPin: pl.has_pin === true
     }));
-
 
     highscoresDB = (dbHs || []).map(h => ({
         id: h.id,
@@ -417,7 +498,6 @@ async function loadAllDatabaseData() {
             ? `${formatScore(verifiedForPin[0].score)} (${getFormattedPlayerDisplay(verifiedForPin[0].initials)})`
             : "Noch kein Rekord";
 
-        // WICHTIG: Erlaubt hs_max_length = 0 für historische Flipper ohne Namenseingabe!
         const parsedMaxLen = (p.hs_max_length !== null && p.hs_max_length !== undefined && p.hs_max_length !== '')
             ? Number(p.hs_max_length)
             : 3;
@@ -482,6 +562,10 @@ async function togglePinballPower(pinballId, btnElement, onDone = null) {
         return;
     }
 
+    if (!isTechMode && !ensureWritePermission()) {
+        return;
+    }
+
     const isCurrentlyOn = targetPin.power === 'ON';
     if (isCurrentlyOn && !isTechMode) {
         alert("Sicherheitssperre: Nur Techniker dürfen Flipper wieder ausschalten!");
@@ -537,7 +621,6 @@ async function togglePrivatePhoto(boxId, btnId, filePath, showText, hideText, la
     `;
 }
 
-// Löscht niedrigere alte Scores desselben Spielers (auch über verknüpfte Aliase hinweg!)
 async function removeOldLowerPlayerScores(pinballId, playerInitials, keepScoreId, newScoreValue) {
     const oldEntries = highscoresDB.filter(
         h => h.pinballId === pinballId &&
@@ -554,7 +637,6 @@ async function removeOldLowerPlayerScores(pinballId, playerInitials, keepScoreId
     }
 }
 
-// Service Worker registrieren
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').catch(() => {});

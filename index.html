@@ -76,6 +76,7 @@
         }
 
         function showFeedbackOnIndex() {
+            if (!ensureWritePermission()) return;
             document.getElementById('view-user-overview').classList.add('hidden');
             document.getElementById('view-feedback').classList.remove('hidden');
         }
