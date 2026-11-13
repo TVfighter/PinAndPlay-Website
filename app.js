@@ -412,22 +412,22 @@ async function loadAllDatabaseData() {
     const queries = [
         db.from('flipper').select('*').order('name', { ascending: true }),
         db.from('designer').select('*'),
-        db.from('reports').select('*'),
         db.from('highscore').select('*').order('score', { ascending: false }),
         db.from('players').select('*').order('display_name', { ascending: true })
     ];
 
     if (isLoggedIn) {
+        queries.push(db.from('reports').select('*'));
         queries.push(db.from('feedback').select('*').order('created_at', { ascending: false }));
     }
 
     const results = await Promise.all(queries);
     const dbPins = results[0].data;
     const dbDes = results[1].data;
-    const dbReps = results[2].data;
-    const dbHs = results[3].data;
-    const dbPlayers = results[4] && !results[4].error ? results[4].data : [];
-    const dbFb = results[5] ? results[5].data : [];
+    const dbHs = results[2].data;
+    const dbPlayers = results[3] && !results[3].error ? results[3].data : [];
+    const dbReps = (isLoggedIn && results[4]) ? results[4].data : [];
+    const dbFb = (isLoggedIn && results[5]) ? results[5].data : [];
 
     playersDB = (dbPlayers || []).map(pl => ({
         id: pl.id,
