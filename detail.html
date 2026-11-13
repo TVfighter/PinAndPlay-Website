@@ -17,6 +17,7 @@
                 <h2 id="detail-title" style="margin: 0;">Lade Flipper...</h2>
             </div>
             <div class="detail-header-actions">
+                <span id="detail-inactive-badge" class="badge-inactive-warn hidden">Hinweis: Dieser Flipper ist derzeit außer Betrieb</span>
                 <button class="btn-power" id="detail-power" onclick="handleDetailPowerClick()">ON</button>
                 <button class="btn-report" id="detail-report-btn" onclick="openUserReportView()">Flipper melden</button>
             </div>
@@ -40,7 +41,7 @@
         <div class="georg-text-container" id="detail-desc"></div>
     </div>
 
-    <!-- USER FLOW: Nur Defekt melden -->
+    <!-- USER FLOW: Nur Defekt melden (Ohne Ursachen-Feld für normale Nutzer) -->
     <div id="view-report" class="container hidden">
         <div class="detail-header">
             <div class="detail-header-left">
@@ -89,6 +90,13 @@
             const pwrBtn = document.getElementById('detail-power');
             const reportBtn = document.getElementById('detail-report-btn');
             const addScoreBtn = document.getElementById('detail-add-score-btn');
+            const inactiveBadge = document.getElementById('detail-inactive-badge');
+
+            // Hinweisschild "Außer Betrieb" anzeigen, sobald der Flipper inaktiv ist
+            if (inactiveBadge) {
+                if (!currentPinball.isAktiv) inactiveBadge.classList.remove('hidden');
+                else inactiveBadge.classList.add('hidden');
+            }
 
             if (isTechMode) {
                 stylePowerButton(pwrBtn, currentPinball.power);

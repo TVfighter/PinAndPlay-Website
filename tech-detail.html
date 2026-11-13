@@ -37,7 +37,7 @@
             </div>
         </div>
 
-        <!-- TECHNIKER: Vereinigte 3-Tab-Verwaltung (Offene Meldungen, Behobene Meldungen & Highscores) -->
+        <!-- TECHNIKER: Vereinigte 3-Tab-Verwaltung -->
         <div style="margin-top: 30px;">
             <h3 style="margin: 0 0 15px 0; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">Meldungen, Archiv &amp; Highscores</h3>
 
@@ -127,8 +127,11 @@
                     <option value="3">Prio 3 — Niedrig (Kaum spürbar / Kosmetisch)</option>
                 </select>
 
-                <label><strong>Beschreibung des Defekts</strong></label>
-                <textarea id="modal-report-desc" rows="5" placeholder="Bitte beschreibe das Problem am Flipper im Detail..."></textarea>
+                <label><strong>Beschreibung der Defekterscheinung</strong></label>
+                <textarea id="modal-report-desc" rows="4" placeholder="Bitte beschreibe das sichtbare Problem am Flipper..."></textarea>
+
+                <label><strong>Hinterliegender Grund / Technische Ursache (Optional, nur für Techniker)</strong></label>
+                <textarea id="modal-report-cause" rows="3" placeholder="z.B. Kabelbruch an Spule, Lichtschranke verschmutzt, Sicherung F104... (Optional)"></textarea>
 
                 <label><strong id="modal-file-label">Foto vom Defekt hochladen (Optional)</strong></label><br>
                 <input type="file" id="modal-report-file" accept="image/*" style="margin-bottom: 15px; border: none; padding: 0;">
@@ -396,7 +399,8 @@
             container.innerHTML = '';
             list.forEach(h => {
                 const dateStr = new Date(h.date).toLocaleDateString('de-DE');
-                const safeInit = h.initials.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const formattedPlayer = getFormattedPlayerDisplay(h.initials);
+                const safeInit = formattedPlayer.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const safeFoto = h.beweisfoto.replace(/'/g, "\\'");
                 const borderColor = h.verifiziert ? 'var(--status-green)' : 'var(--gold-mid)';
                 const badgeHtml = h.verifiziert
@@ -435,15 +439,17 @@
             const target = highscoresDB.find(h => h.id === hsId);
             if (!target) return;
 
-            const normInit = target.initials.trim().toLowerCase();
             const existingVerified = highscoresDB.filter(
-                h => h.pinballId === target.pinballId && h.verifiziert && h.id !== hsId && h.initials.trim().toLowerCase() === normInit
+                h => h.pinballId === target.pinballId &&
+                     h.verifiziert &&
+                     h.id !== hsId &&
+                     isSamePlayerIdentity(h.initials, target.initials)
             );
 
             if (existingVerified.length > 0) {
                 const currentBest = Math.max(...existingVerified.map(s => s.score));
                 if (target.score <= currentBest) {
-                    alert(`Hinweis: Der Spieler "${target.initials}" hat an diesem Gerät bereits einen höheren (oder gleich hohen) verifizierten Rekord (${formatScore(currentBest)} Punkte). Ein niedrigerer Score (${formatScore(target.score)} Punkte) kann den Rekord nicht überschreiben.`);
+                    alert(`Hinweis: Der Spieler "${getFormattedPlayerDisplay(target.initials)}" hat an diesem Gerät bereits einen höheren (oder gleich hohen) verifizierten Rekord (${formatScore(currentBest)} Punkte). Ein niedrigerer Score (${formatScore(target.score)} Punkte) kann den Rekord nicht überschreiben.`);
                     return;
                 }
             }
@@ -549,6 +555,7 @@
                     : '';
 
                 const safeText = r.text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const safeCause = (r.ursache || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const safeSolution = r.loesungsweg.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const safeEmail = r.email.replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 const safeFoto = r.foto_url.replace(/'/g, "\\'");
@@ -561,6 +568,10 @@
                 if (r.loesung_foto_url) {
                     photoBtns.push(`<button id="btn-photo-solution-${r.id}" class="btn-switch" style="border-color: var(--status-green); color: #7ee787;" onclick="togglePrivatePhoto('report-photo-box-solution-${r.id}', 'btn-photo-solution-${r.id}', '${safeSolFoto}', 'Lösungs-Foto ansehen', 'Lösungs-Foto ausblenden', 'Foto der Lösung')">Lösungs-Foto ansehen</button>`);
                 }
+
+                const causeBoxHtml = safeCause
+                    ? `<div class="report-cause-box"><strong>Hinterliegender Grund (Technik-Diagnose):</strong><br>${safeCause}</div>`
+                    : '';
 
                 const solutionBoxHtml = (r.status === 'behoben' && safeSolution)
                     ? `<div class="report-solution-box"><strong>Dokumentierter Lösungsweg:</strong><br>${safeSolution}</div>`
@@ -596,6 +607,7 @@
                         </div>
 
                         <div class="report-body-text">${safeText}</div>
+                        ${causeBoxHtml}
                         ${solutionBoxHtml}
                         ${emailInfoHtml}
 
@@ -622,6 +634,7 @@
             const heading = document.getElementById('modal-report-heading');
             const prioSelect = document.getElementById('modal-report-prio');
             const descInput = document.getElementById('modal-report-desc');
+            const causeInput = document.getElementById('modal-report-cause');
             const fileInput = document.getElementById('modal-report-file');
             const fileLabel = document.getElementById('modal-file-label');
             const saveBtn = document.getElementById('modal-save-btn');
@@ -634,6 +647,7 @@
                 heading.innerText = `Neue Meldung für ${currentPinball.name}`;
                 prioSelect.value = '2';
                 descInput.value = '';
+                causeInput.value = '';
                 fileLabel.innerText = 'Foto vom Defekt hochladen (Optional)';
                 saveBtn.innerText = 'Meldung verifiziert eintragen';
             } else {
@@ -644,6 +658,7 @@
                     : `Meldung prüfen & verifizieren (${currentPinball.name})`;
                 prioSelect.value = (target.prio >= 1 && target.prio <= 3) ? String(target.prio) : '2';
                 descInput.value = target.text;
+                causeInput.value = target.ursache || '';
                 fileLabel.innerText = target.foto_url
                     ? 'Neues Foto hochladen (Ersetzt das bisherige Foto, optional)'
                     : 'Foto vom Defekt hochladen (Optional)';
@@ -670,6 +685,7 @@
 
             const prioNum = parseInt(document.getElementById('modal-report-prio').value, 10);
             const desc = document.getElementById('modal-report-desc').value.trim();
+            const cause = document.getElementById('modal-report-cause').value.trim();
             const fileInput = document.getElementById('modal-report-file');
 
             const saveBtn = document.getElementById('modal-save-btn');
@@ -694,6 +710,7 @@
                     const { error } = await db.from('reports').insert([{
                         flipper_id: currentPinball.id,
                         meldung: desc,
+                        ursache: cause,
                         intensitaet: prioNum,
                         status: 'offen',
                         verifiziert: true,
@@ -706,6 +723,7 @@
                     const updatePayload = {
                         intensitaet: prioNum,
                         meldung: desc,
+                        ursache: cause,
                         verifiziert: true
                     };
                     if (uploadedFilePath !== null) {

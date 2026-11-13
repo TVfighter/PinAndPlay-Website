@@ -65,12 +65,18 @@
             <label><strong>Flipper auswählen</strong></label>
             <select id="hs-pinball-select" onchange="onHighscorePinballChange()"></select>
 
-            <label><strong>Deine Initialen / Name</strong></label>
-            <input type="text" id="hs-initials" maxlength="3" placeholder="ABC" oninput="handleInitialsInput()">
+            <label><strong>Deine Initialen / Spielername</strong></label>
+            <input type="text" id="hs-initials" maxlength="12" placeholder="ABC" oninput="handleInitialsInput()">
             <div id="hs-initials-rules-hint" class="hs-rules-hint"></div>
 
             <div id="hs-prev-score-info" class="prev-score-banner">
-                Gib oben deine Initialen ein, um deinen bisherigen Highscore an diesem Flipper zu sehen.
+                Gib oben deine Initialen oder deinen verknüpften Spielernamen ein, um deinen bisherigen Highscore an diesem Flipper zu sehen.
+            </div>
+
+            <!-- Optionales PIN-Feld (erscheint nur, falls für das erkannte Stammspieler-Profil eine Schutz-PIN hinterlegt ist) -->
+            <div id="hs-pin-protect-box" class="hidden">
+                <label><strong>Spieler-PIN für dieses Profil (Schutz gegen fremde Einträge)</strong></label>
+                <input type="password" id="hs-player-pin" maxlength="8" placeholder="4-stellige PIN">
             </div>
 
             <label><strong>Neuer Highscore (Punktzahl)</strong></label>
@@ -125,7 +131,8 @@
                     .sort((a, b) => b.score - a.score);
 
                 const topEntry = machineScores[0];
-                const holderText = topEntry ? `<strong style="color:var(--gold-light);">${topEntry.initials}</strong>` : '<span style="color:var(--text-muted);">-</span>';
+                const holderDisplay = topEntry ? getFormattedPlayerDisplay(topEntry.initials).replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
+                const holderText = topEntry ? `<strong style="color:var(--gold-light);">${holderDisplay}</strong>` : '<span style="color:var(--text-muted);">-</span>';
                 const scoreText = topEntry ? `<strong>${formatScore(topEntry.score)}</strong>` : '<span style="color:var(--text-muted);">Noch kein Rekord</span>';
 
                 const actionAddHtml = (isTechMode || p.isAktiv)
@@ -200,7 +207,8 @@
                 else if (idx === 1) rankHtml = `<span class="rank-badge rank-2">2.</span>`;
                 else if (idx === 2) rankHtml = `<span class="rank-badge rank-3">3.</span>`;
 
-                const safeInit = entry.initials.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const displayPlayer = getFormattedPlayerDisplay(entry.initials);
+                const safeInit = displayPlayer.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
                 singleTbody.innerHTML += `
                     <tr>
@@ -270,6 +278,16 @@
             }
         }
 
+        // Berechnet den an dieses Gerät angepassten Namen, falls ein verknüpftes Spielerprofil erkannt wurde
+        function getTargetNameForPinball(rawTyped, pin) {
+            const prof = resolvePlayerProfile(rawTyped);
+            if (!prof || !pin) return rawTyped;
+            if (pin.hsMaxLength === 0 || pin.hsMaxLength > 3) {
+                return prof.displayName.toUpperCase().substring(0, pin.hsMaxLength === 0 ? 15 : pin.hsMaxLength);
+            }
+            return prof.shortInitials.toUpperCase().substring(0, pin.hsMaxLength);
+        }
+
         function onHighscorePinballChange() {
             const pinId = Number(document.getElementById('hs-pinball-select').value);
             const pin = pinballs.find(p => p.id === pinId);
@@ -277,38 +295,46 @@
             const hintBox = document.getElementById('hs-initials-rules-hint');
 
             if (pin) {
-                initialsInput.maxLength = pin.hsMaxLength;
-                initialsInput.placeholder = pin.hsMaxLength <= 3 ? 'ABC' : `Max. ${pin.hsMaxLength} Zeichen`;
+                // Damit man auch an 3-Buchstaben-Geräten z.B. "Valentin" oder "TVfighter" zur Erkennung eintippen kann,
+                // lassen wir im Eingabefeld bis zu 15 Zeichen zu und kürzen bei Bedarf automatisch auf das Geräte-Format!
+                initialsInput.maxLength = Math.max(pin.hsMaxLength, 15);
 
-                let allowedParts = [];
-                allowedParts.push(pin.hsAllowLower ? 'Groß- & Kleinbuchstaben (A–Z, a–z)' : 'Nur Großbuchstaben (A–Z)');
-                if (pin.hsAllowNumbers) allowedParts.push('Zahlen (0–9)');
-                if (pin.hsAllowSpecial) allowedParts.push('Leer-/Sonderzeichen');
+                if (pin.hsMaxLength === 0) {
+                    initialsInput.placeholder = 'Dein Kürzel / Spielername';
+                    hintBox.innerHTML = `<strong>Historisches Gerät („${pin.name}“):</strong> Am Flipper selbst können keine Initialen eingegeben werden (reine Punkteanzeige). Gib hier dein Kürzel oder deinen Spielernamen für die Online-Bestenliste ein und fotografiere das Display direkt nach Spielende.`;
+                } else {
+                    initialsInput.placeholder = pin.hsMaxLength <= 3 ? 'ABC (oder verknüpfter Spielername)' : `Max. ${pin.hsMaxLength} Zeichen`;
+                    let allowedParts = ['Großbuchstaben (A–Z)'];
+                    if (pin.hsAllowNumbers) allowedParts.push('Zahlen (0–9)');
+                    if (pin.hsAllowSpecial) allowedParts.push('Leer-/Sonderzeichen');
 
-                hintBox.innerHTML = `<strong>Eingaberegeln an „${pin.name}“:</strong> Max. <strong>${pin.hsMaxLength} Zeichen</strong> — ${allowedParts.join(', ')}`;
+                    hintBox.innerHTML = `<strong>Eingaberegeln an „${pin.name}“:</strong> Max. <strong>${pin.hsMaxLength} Zeichen am Gerät</strong> — ${allowedParts.join(', ')}`;
+                }
             }
 
             handleInitialsInput();
         }
 
-        function sanitizeInitialsForPinball(rawVal, pin) {
-            if (!pin) return rawVal;
-            let val = rawVal;
-            if (!pin.hsAllowLower) val = val.toUpperCase();
+        // Fest im Code verankert: Immer Großbuchstaben (kein hsAllowLower mehr nötig)
+        function sanitizeInitialsForPinball(rawVal, pin, enforceMachineLength = false) {
+            if (!pin) return String(rawVal || '').toUpperCase();
+            const val = String(rawVal || '').toUpperCase();
 
             let sanitized = '';
             for (const ch of val) {
                 const isUpper = /^[A-ZÄÖÜ]$/.test(ch);
-                const isLower = /^[a-zäöüß]$/.test(ch);
                 const isDigit = /^[0-9]$/.test(ch);
                 const isSpecial = /^[^A-Za-zÄÖÜäöüß0-9]$/.test(ch);
 
                 if (isUpper) sanitized += ch;
-                else if (isLower && pin.hsAllowLower) sanitized += ch;
-                else if (isDigit && pin.hsAllowNumbers) sanitized += ch;
+                else if (isDigit && (pin.hsAllowNumbers || !enforceMachineLength)) sanitized += ch;
                 else if (isSpecial && pin.hsAllowSpecial) sanitized += ch;
             }
-            return sanitized.substring(0, pin.hsMaxLength);
+
+            if (enforceMachineLength && pin.hsMaxLength > 0) {
+                return sanitized.substring(0, pin.hsMaxLength);
+            }
+            return sanitized.substring(0, 15);
         }
 
         function handleInitialsInput() {
@@ -317,7 +343,7 @@
             const initialsInput = document.getElementById('hs-initials');
 
             if (pin) {
-                const cleaned = sanitizeInitialsForPinball(initialsInput.value, pin);
+                const cleaned = sanitizeInitialsForPinball(initialsInput.value, pin, false);
                 if (initialsInput.value !== cleaned) {
                     initialsInput.value = cleaned;
                 }
@@ -325,30 +351,58 @@
             updatePreviousHighscoreInfo();
         }
 
-        function updatePreviousHighscoreInfo() {
+ function updatePreviousHighscoreInfo() {
             const pinId = Number(document.getElementById('hs-pinball-select').value);
-            const initials = document.getElementById('hs-initials').value.trim();
+            const pin = pinballs.find(p => p.id === pinId);
+            const rawTyped = document.getElementById('hs-initials').value.trim();
             const infoBox = document.getElementById('hs-prev-score-info');
+            const pinBox = document.getElementById('hs-pin-protect-box');
+            const pinInput = document.getElementById('hs-player-pin');
 
-            if (!initials) {
-                infoBox.innerHTML = "Gib oben deine Initialen ein, um deinen bisherigen Highscore an diesem Flipper zu sehen.";
+            if (!rawTyped) {
+                infoBox.innerHTML = "Gib oben deine Initialen oder deinen verknüpften Spielernamen ein, um deinen bisherigen Highscore an diesem Flipper zu sehen.";
+                if (pinBox) pinBox.classList.add('hidden');
                 return;
             }
 
-            const normalized = initials.toLowerCase();
+            const matchedProfile = resolvePlayerProfile(rawTyped);
+            const storedPinForProfile = matchedProfile ? localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`) : null;
+
+            // PIN-Eingabefeld nur einblenden, wenn das Profil geschützt ist und die PIN auf diesem Gerät noch nicht gespeichert wurde
+            if (matchedProfile && matchedProfile.hasPin && !isTechMode) {
+                if (storedPinForProfile) {
+                    pinInput.value = storedPinForProfile;
+                    pinBox.classList.add('hidden');
+                } else {
+                    pinBox.classList.remove('hidden');
+                }
+            } else if (pinBox) {
+                pinBox.classList.add('hidden');
+            }
+
+            const finalMachineName = matchedProfile
+                ? getTargetNameForPinball(rawTyped, pin)
+                : sanitizeInitialsForPinball(rawTyped, pin, true);
+
             const verifiedPlayerScores = highscoresDB.filter(
-                h => h.pinballId === pinId && h.verifiziert && h.initials.trim().toLowerCase() === normalized
+                h => h.pinballId === pinId && h.verifiziert && isSamePlayerIdentity(h.initials, rawTyped)
             );
             const pendingPlayerScores = highscoresDB.filter(
-                h => h.pinballId === pinId && !h.verifiziert && h.initials.trim().toLowerCase() === normalized
+                h => h.pinballId === pinId && !h.verifiziert && isSamePlayerIdentity(h.initials, rawTyped)
             );
 
             let html = '';
+            if (matchedProfile) {
+                html += `<div style="margin-bottom: 4px; color: var(--gold-light);">Verknüpftes Spielerprofil erkannt: <strong>${matchedProfile.displayName}</strong> (Wird für dieses Gerät gespeichert als: <strong>${finalMachineName}</strong>)</div>`;
+            } else if (pin && pin.hsMaxLength > 0 && rawTyped.length > pin.hsMaxLength) {
+                html += `<div style="margin-bottom: 4px; color: var(--accent-yellow-hover);">Hinweis: „${pin.name}“ erlaubt max. ${pin.hsMaxLength} Zeichen — Eingabe wird beim Senden auf <strong>${finalMachineName}</strong> gekürzt.</div>`;
+            }
+
             if (verifiedPlayerScores.length > 0) {
                 const best = Math.max(...verifiedPlayerScores.map(s => s.score));
-                html += `Dein bisheriger verifizierter Highscore als <strong style="color:var(--gold-light);">${initials}</strong> an diesem Gerät: <strong>${formatScore(best)} Punkte</strong>`;
+                html += `Dein bisheriger verifizierter Highscore an diesem Gerät: <strong>${formatScore(best)} Punkte</strong>`;
             } else {
-                html += `Noch kein verifizierter Highscore für <strong style="color:var(--gold-light);">${initials}</strong> an diesem Gerät eingetragen.`;
+                html += `Noch kein verifizierter Highscore für <strong style="color:var(--gold-light);">${matchedProfile ? matchedProfile.displayName : finalMachineName}</strong> an diesem Gerät eingetragen.`;
             }
 
             if (pendingPlayerScores.length > 0) {
@@ -368,8 +422,13 @@
                 return;
             }
 
-            const rawInitials = document.getElementById('hs-initials').value;
-            const initials = sanitizeInitialsForPinball(rawInitials, pin).trim();
+            const rawInitials = document.getElementById('hs-initials').value.trim();
+            const matchedProfile = resolvePlayerProfile(rawInitials);
+
+            const initials = matchedProfile
+                ? getTargetNameForPinball(rawInitials, pin)
+                : sanitizeInitialsForPinball(rawInitials, pin, true).trim();
+
             const scoreVal = parseInt(document.getElementById('hs-score').value, 10);
             const fileInput = document.getElementById('hs-file');
 
@@ -381,9 +440,16 @@
                 return;
             }
 
-            const normalized = initials.toLowerCase();
+            if (pin.hsMaxLength === 0) {
+                const duplicateExactScore = highscoresDB.some(h => h.pinballId === pinId && h.score === scoreVal);
+                if (duplicateExactScore) {
+                    alert(`Sicherheitssperre für Geräte ohne Namensanzeige: Exakt dieser Punktestand (${formatScore(scoreVal)}) wurde an „${pin.name}“ bereits eingereicht!`);
+                    return;
+                }
+            }
+
             const verifiedPlayerScores = highscoresDB.filter(
-                h => h.pinballId === pinId && h.verifiziert && h.initials.trim().toLowerCase() === normalized
+                h => h.pinballId === pinId && h.verifiziert && isSamePlayerIdentity(h.initials, initials)
             );
             if (verifiedPlayerScores.length > 0) {
                 const currentBest = Math.max(...verifiedPlayerScores.map(s => s.score));
@@ -391,6 +457,35 @@
                     alert(`Eintrag nicht möglich: Dein neuer Score (${formatScore(scoreVal)} Punkte) muss höher sein als dein bisheriger verifizierter Rekord (${formatScore(currentBest)} Punkte) an diesem Gerät!`);
                     return;
                 }
+            }
+
+            // Serverseitige PIN-Prüfung über Supabase RPC (kein Auslesen der PIN im Browser möglich!)
+            if (matchedProfile && matchedProfile.hasPin && !isTechMode) {
+                const savedPin = localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`);
+                const enteredPin = document.getElementById('hs-player-pin').value.trim();
+                const activePin = savedPin || enteredPin;
+
+                if (!activePin) {
+                    document.getElementById('hs-pin-protect-box').classList.remove('hidden');
+                    alert(`Das Spielerprofil „${matchedProfile.displayName}“ ist geschützt. Bitte gib deine Spieler-PIN ein!`);
+                    return;
+                }
+
+                const { data: pinValid, error: pinErr } = await db.rpc('verify_player_pin', {
+                    p_player_id: matchedProfile.id,
+                    p_pin: activePin
+                });
+
+                if (pinErr || !pinValid) {
+                    localStorage.removeItem(`pinplay_player_pin_${matchedProfile.id}`);
+                    document.getElementById('hs-pin-protect-box').classList.remove('hidden');
+                    document.getElementById('hs-player-pin').value = '';
+                    alert("Falsche Spieler-PIN! Falls eine gespeicherte PIN abgelaufen war, gib sie bitte neu ein.");
+                    return;
+                }
+
+                // Erst nach erfolgreicher Server-Prüfung lokal für zukünftige Einträge merken
+                localStorage.setItem(`pinplay_player_pin_${matchedProfile.id}`, activePin);
             }
 
             submitBtn.disabled = true;

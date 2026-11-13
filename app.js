@@ -4,10 +4,10 @@ const supabaseKey = 'sb_publishable__H6Yjq1-Tift6S7NHxSGcw_ihus2Zbw';
 const db = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 // Ziel-URL für das Pin&Play-Logo (Offizielle Homepage)
-const OFFICIAL_HOMEPAGE_URL = 'index.html'; // Später z.B. 'https://pinandplay.de' eintragen
+const OFFICIAL_HOMEPAGE_URL = 'index.html';
 
 // Schlüssel für den dauerhaften Browser-Speicher
-const CACHE_KEY_STATE = 'pinplay_full_data_cache_v3';
+const CACHE_KEY_STATE = 'pinplay_full_data_cache_v4';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Globale Variablen
@@ -15,6 +15,7 @@ let pinballs = [];
 let reportsDB = [];
 let highscoresDB = [];
 let feedbackDB = [];
+let playersDB = [];
 let isLoggedIn = false;
 let isTechMode = false;
 
@@ -63,15 +64,51 @@ function stylePowerButton(btnElement, powerState) {
     btnElement.style.borderColor = powerState === 'ON' ? '#2ea043' : '#cf3432';
 }
 
+// --- SPIELER-ALIAS-VERKNÜPFUNG ("Val" <-> "Valentin" <-> "TVfighter") ---
+
+function resolvePlayerProfile(rawInput) {
+    if (!rawInput) return null;
+    const norm = String(rawInput).trim().toUpperCase();
+    if (!norm) return null;
+
+    return playersDB.find(pl =>
+        pl.displayName.toUpperCase() === norm ||
+        pl.shortInitials.toUpperCase() === norm ||
+        pl.aliases.some(a => a.toUpperCase() === norm)
+    ) || null;
+}
+
+// Prüft, ob zwei eingetragene Namen/Initialen zur selben Person gehören
+function isSamePlayerIdentity(nameA, nameB) {
+    const normA = String(nameA || '').trim().toUpperCase();
+    const normB = String(nameB || '').trim().toUpperCase();
+    if (!normA || !normB) return false;
+    if (normA === normB) return true;
+
+    const profA = resolvePlayerProfile(normA);
+    const profB = resolvePlayerProfile(normB);
+    return (profA && profB && profA.id === profB.id);
+}
+
+// Gibt den passend zur Flipper-Zeichenlänge formatierten Namen eines Spielers zurück
+function getFormattedPlayerDisplay(rawInitials) {
+    const prof = resolvePlayerProfile(rawInitials);
+    if (!prof) return rawInitials;
+    const upperRaw = String(rawInitials).trim().toUpperCase();
+    if (upperRaw === prof.displayName.toUpperCase()) {
+        return prof.displayName;
+    }
+    return `${upperRaw} (${prof.displayName})`;
+}
+
 // Ermittelt, welcher Haupt-Tab oben im Banner gerade aktiv ist
 function getActiveNavTab() {
     const path = window.location.pathname;
-    if (path.endsWith('highscores.html')) return 'highscores';
-    if (path.endsWith('tech-feedback.html')) return 'tech-feedback';
+    if (path.endsWith('highscores.html') || path.endsWith('/highscores')) return 'highscores';
+    if (path.endsWith('tech-feedback.html') || path.endsWith('/tech-feedback')) return 'tech-feedback';
     return 'overview';
 }
 
-// Baut den Header mit Original-Logo und gelben Navigations-Knöpfen auf
 function renderSharedHeader() {
     const header = document.getElementById('main-header');
     if (!header) return;
@@ -193,17 +230,17 @@ function toggleTechMode() {
     const fromSuffix = params.get('from') ? `&from=${params.get('from')}` : '';
 
     if (isTechMode) {
-        if (path.endsWith('detail.html') && id) {
+        if ((path.endsWith('detail.html') || path.endsWith('/detail')) && id) {
             window.location.href = `tech-detail.html?id=${id}${fromSuffix}`;
-        } else if (path.endsWith('highscores.html')) {
+        } else if (path.endsWith('highscores.html') || path.endsWith('/highscores')) {
             window.location.reload();
         } else {
             window.location.href = 'techniker.html';
         }
     } else {
-        if (path.endsWith('tech-detail.html') && id) {
+        if ((path.endsWith('tech-detail.html') || path.endsWith('/tech-detail')) && id) {
             window.location.href = `detail.html?id=${id}${fromSuffix}`;
-        } else if (path.endsWith('highscores.html')) {
+        } else if (path.endsWith('highscores.html') || path.endsWith('/highscores')) {
             window.location.reload();
         } else {
             window.location.href = 'index.html';
@@ -220,6 +257,7 @@ function saveStateToCache() {
             reportsDB,
             highscoresDB,
             feedbackDB,
+            playersDB,
             timestamp: Date.now()
         }));
     } catch (e) {}
@@ -235,6 +273,7 @@ function restoreStateFromCache() {
             reportsDB = parsed.reportsDB || [];
             highscoresDB = parsed.highscoresDB || [];
             feedbackDB = parsed.feedbackDB || [];
+            playersDB = parsed.playersDB || [];
             const age = Date.now() - (parsed.timestamp || 0);
             return { loaded: true, isFresh: age < CACHE_TTL_MS };
         }
@@ -292,7 +331,8 @@ async function loadAllDatabaseData() {
         db.from('flipper').select('*').order('name', { ascending: true }),
         db.from('designer').select('*'),
         db.from('reports').select('*'),
-        db.from('highscore').select('*').order('score', { ascending: false })
+        db.from('highscore').select('*').order('score', { ascending: false }),
+        db.from('players').select('*')
     ];
 
     if (isLoggedIn) {
@@ -304,12 +344,23 @@ async function loadAllDatabaseData() {
     const dbDes = results[1].data;
     const dbReps = results[2].data;
     const dbHs = results[3].data;
-    const dbFb = results[4] ? results[4].data : [];
+    const dbPlayers = results[4] && !results[4].error ? results[4].data : [];
+    const dbFb = results[5] ? results[5].data : [];
+
+
+   playersDB = (dbPlayers || []).map(pl => ({
+        id: pl.id,
+        displayName: pl.display_name || '',
+        shortInitials: (pl.short_tag || pl.short_initials || '').toUpperCase(),
+        aliases: Array.isArray(pl.aliases) ? pl.aliases.map(a => String(a).toUpperCase()) : [],
+        hasPin: pl.has_pin === true
+    }));
+
 
     highscoresDB = (dbHs || []).map(h => ({
         id: h.id,
         pinballId: h.flipper_id,
-        initials: h.initials || '???',
+        initials: (h.initials || '???').toUpperCase(),
         score: Number(h.score || 0),
         verifiziert: h.verifiziert === true,
         beweisfoto: h.beweisfoto || '',
@@ -334,6 +385,7 @@ async function loadAllDatabaseData() {
             email: r.email || '',
             foto_url: r.foto_url || '',
             text: r.meldung || '',
+            ursache: r.ursache || '',
             loesungsweg: r.loesungsweg || '',
             loesung_foto_url: r.loesung_foto_url || ''
         };
@@ -362,8 +414,13 @@ async function loadAllDatabaseData() {
             .sort((a, b) => b.score - a.score);
 
         const topScoreStr = verifiedForPin.length > 0
-            ? `${formatScore(verifiedForPin[0].score)} (${verifiedForPin[0].initials})`
+            ? `${formatScore(verifiedForPin[0].score)} (${getFormattedPlayerDisplay(verifiedForPin[0].initials)})`
             : "Noch kein Rekord";
+
+        // WICHTIG: Erlaubt hs_max_length = 0 für historische Flipper ohne Namenseingabe!
+        const parsedMaxLen = (p.hs_max_length !== null && p.hs_max_length !== undefined && p.hs_max_length !== '')
+            ? Number(p.hs_max_length)
+            : 3;
 
         return {
             id: p.id,
@@ -380,8 +437,7 @@ async function loadAllDatabaseData() {
             desc: p['georgs text'] || "",
             isAktiv: isAktiv,
             imgUrl: getFlipperImageUrl(rawImg),
-            hsMaxLength: Number(p.hs_max_length) > 0 ? Number(p.hs_max_length) : 3,
-            hsAllowLower: p.hs_allow_lower === true,
+            hsMaxLength: !isNaN(parsedMaxLen) && parsedMaxLen >= 0 ? parsedMaxLen : 3,
             hsAllowNumbers: p.hs_allow_numbers === true,
             hsAllowSpecial: p.hs_allow_special === true
         };
@@ -481,12 +537,12 @@ async function togglePrivatePhoto(boxId, btnId, filePath, showText, hideText, la
     `;
 }
 
+// Löscht niedrigere alte Scores desselben Spielers (auch über verknüpfte Aliase hinweg!)
 async function removeOldLowerPlayerScores(pinballId, playerInitials, keepScoreId, newScoreValue) {
-    const normInitials = playerInitials.trim().toLowerCase();
     const oldEntries = highscoresDB.filter(
         h => h.pinballId === pinballId &&
              h.id !== keepScoreId &&
-             h.initials.trim().toLowerCase() === normInitials &&
+             isSamePlayerIdentity(h.initials, playerInitials) &&
              h.score <= newScoreValue
     );
 

@@ -770,6 +770,17 @@ th.sortable-th:hover { background-color: #282c36; color: var(--gold-light); }
     color: #a2f2a9;
     white-space: pre-wrap;
 }
+.report-cause-box {
+    background: rgba(212, 175, 55, 0.1);
+    border-left: 4px solid var(--gold-mid);
+    padding: 10px 14px;
+    border-radius: 4px;
+    margin-top: 10px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: var(--gold-light);
+    white-space: pre-wrap;
+}
 .report-meta-email { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
 .report-actions {
     display: flex;
