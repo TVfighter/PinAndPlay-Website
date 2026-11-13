@@ -1,0 +1,14 @@
+RewriteEngine On
+
+# 1. "index.html" am Ende der Adresse automatisch entfernen
+RewriteCond %{THE_REQUEST} /index\.html[\s?] [NC]
+RewriteRule ^(.*)index\.html$ /$1 [R=301,L]
+
+# 2. Falls eine Adresse noch ".html" enthält -> ".html" aus der Adresszeile entfernen
+RewriteCond %{THE_REQUEST} \.html[\s?] [NC]
+RewriteRule ^(.+)\.html$ /$1 [R=301,L]
+
+# 3. Saubere Adressen ohne ".html" intern mit der passenden .html-Datei verknüpfen
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}\.html -f
+RewriteRule ^([^\.]+)$ $1.html [NC,L]

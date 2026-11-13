@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&Play - Kürzel & QR-Code</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <!-- KIOSK / DISPLAY MODUS FÜR DEN EINGANGSBEREICH (?kiosk=1) -->
+    <div id="view-qr-kiosk" class="container hidden" style="text-align: center; max-width: 650px; margin-top: 40px; padding: 35px;">
+        <img src="logo.png" alt="Pin & Play" style="height: 64px; margin-bottom: 15px;">
+        <h2 style="font-size: 26px; margin: 0 0 10px 0;">Tages-Check-In für Spieler</h2>
+        <p style="color: var(--text-muted); font-size: 16px; margin-bottom: 25px;">
+            Scanne diesen QR-Code mit deiner Smartphone-Kamera, um heute Highscores, Defekte und Feedback einzureichen.
+        </p>
+        <div id="kiosk-qr-box" style="background: white; padding: 20px; border-radius: 12px; display: inline-block; border: 4px solid var(--gold-mid);"></div>
+        <div style="margin-top: 20px; font-size: 14px; color: var(--gold-light); font-weight: bold;" id="kiosk-date-label"></div>
+        <div style="margin-top: 25px;">
+            <button class="btn-switch" onclick="exitKioskMode()">Kiosk-Ansicht beenden</button>
+        </div>
+    </div>
+
+    <!-- REGULÄRE TECHNIKER-VERWALTUNG -->
+    <div id="view-tech-players-main" class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="window.location.href='techniker'" title="Zurück zum Techniker-Dashboard">←</button>
+                <h2 style="margin: 0;">Spieler-Kürzel &amp; Tages-QR-Code</h2>
+            </div>
+        </div>
+
+        <!-- BEREICH 1: TAGES-QR-CODE -->
+        <div style="background: var(--surface-elevated); border: 1px solid var(--gold-border); border-radius: 8px; padding: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+            <div style="flex: 1; min-width: 260px;">
+                <h3 style="margin-top: 0;">Heutiger Tages-QR-Code (Spamschutz)</h3>
+                <p style="color: var(--text-muted); font-size: 14px; line-height: 1.5;">
+                    Normale Besucher müssen diesen QR-Code heute einmal scannen, um Highscores, Defekte oder Feedback absenden zu können. Der Code wechselt jede Nacht um <strong>05:00 Uhr morgens</strong> automatisch.
+                </p>
+                <div style="margin-bottom: 12px; font-size: 14px;">
+                    Aktueller Tages-Token: <strong style="color: var(--gold-light); letter-spacing: 1px;" id="daily-token-text">Lade...</strong>
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn-yellow" onclick="enterKioskMode()">Vollbild-Display-Modus starten</button>
+                    <button class="btn-switch" onclick="copyQrLink()">Direktlink kopieren</button>
+                </div>
+            </div>
+            <div id="tech-qr-preview" style="background: white; padding: 12px; border-radius: 8px; border: 2px solid var(--gold-mid);"></div>
+        </div>
+
+        <!-- BEREICH 2: SPIELER-KÜRZEL VERWALTUNG -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Verknüpfte Spieler-Profile (<span id="players-count">0</span>)</h3>
+            <button class="btn-green" onclick="openPlayerModal(null)">+ Neues Spieler-Profil anlegen</button>
+        </div>
+
+        <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 15px;">
+            Alle Flipper mit 3 Zeichen (inkl. historische Geräte ohne Namenseingabe) verwenden automatisch das <strong>3er-Standardkürzel</strong>. Für moderne Geräte mit mehr als 3 Zeichen (z.B. Stern vs. JJP) kannst du pro Flipper einen eigenen Namen festlegen.
+        </p>
+
+        <div id="players-list-container"></div>
+    </div>
+
+    <!-- MODAL: SPIELER-PROFIL ANLEGEN / BEARBEITEN -->
+    <div id="player-edit-modal" class="modal-overlay hidden" onclick="if(event.target.id==='player-edit-modal') closePlayerModal()">
+        <div class="modal-box" style="max-width: 600px;">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 id="player-modal-title" style="margin: 0;">Spieler-Profil bearbeiten</h3>
+                <button class="btn-switch" onclick="closePlayerModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <label><strong>Haupt-Anzeigename (z.B. TVfighter)</strong></label>
+                <input type="text" id="pl-display-name" maxlength="20" placeholder="z.B. TVfighter">
+
+                <label><strong>3er-Standardkürzel (Gilt für alle 3-Zeichen-Flipper, z.B. VAL)</strong></label>
+                <input type="text" id="pl-short-tag" maxlength="3" placeholder="VAL" oninput="this.value = this.value.toUpperCase().replace(/[^A-ZÄÖÜ0-9]/g, '')">
+
+                <label><strong>Weitere Such-Kürzel / Aliase (Kommagetrennt, optional)</strong></label>
+                <input type="text" id="pl-aliases" placeholder="z.B. VAL, VALENTIN, TVFIGHTER, TVF">
+
+                <!-- Dynamische Felder für alle Flipper mit mehr als 3 Zeichen (z.B. Stern & JJP) -->
+                <div style="margin-top: 10px; margin-bottom: 15px; padding: 12px; background: var(--surface-elevated); border: 1px solid var(--border-subtle); border-radius: 6px;">
+                    <div style="font-weight: bold; color: var(--gold-light); margin-bottom: 6px; font-size: 14px;">
+                        Name pro Flipper (für Geräte mit mehr als 3 Zeichen, z.B. Stern / JJP):
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+                        Lasse ein Feld leer, wenn an diesem Gerät einfach der Haupt-Anzeigename genutzt werden soll.
+                    </div>
+                    <div id="pl-per-flipper-inputs"></div>
+                </div>
+
+                <label><strong>Optionale Spieler-PIN (Leer lassen = keine PIN / unverändert)</strong></label>
+                <input type="text" id="pl-pin-code" maxlength="8" placeholder="z.B. 1234 (Nur ausfüllen, wenn PIN gewünscht)">
+
+                <div id="pl-clear-pin-wrap" class="hidden" style="margin-top: -8px; margin-bottom: 15px;">
+                    <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main);">
+                        <input type="checkbox" id="pl-clear-pin" style="width: auto; margin: 0;">
+                        Bestehende PIN für dieses Profil löschen (Künftig ohne PIN-Abfrage)
+                    </label>
+                </div>
+
+                <button id="pl-save-btn" class="btn-green" style="width: 100%; padding: 14px;" onclick="savePlayerProfileForm()">Profil speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="app.js"></script>
+    <script>
+        let editingPlayerId = null;
+        let currentQrUrl = '';
+
+        async function loadAndRenderDailyQr() {
+            try {
+                const { data: token, error } = await db.rpc('get_daily_qr_token');
+                if (error || !token) return;
+
+                document.getElementById('daily-token-text').innerText = token;
+                const baseUrl = window.location.origin + window.location.pathname.replace(/tech-players(\.html)?$/, '');
+                currentQrUrl = `${baseUrl}?token=${token}`;
+
+                const previewBox = document.getElementById('tech-qr-preview');
+                previewBox.innerHTML = '';
+                new QRCode(previewBox, {
+                    text: currentQrUrl,
+                    width: 130,
+                    height: 130
+                });
+
+                const kioskBox = document.getElementById('kiosk-qr-box');
+                kioskBox.innerHTML = '';
+                new QRCode(kioskBox, {
+                    text: currentQrUrl,
+                    width: 280,
+                    height: 280
+                });
+
+                const todayStr = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+                document.getElementById('kiosk-date-label').innerText = `Gültig für: ${todayStr} (bis 05:00 Uhr morgens)`;
+            } catch (e) {}
+        }
+
+        function copyQrLink() {
+            if (!currentQrUrl) return;
+            navigator.clipboard.writeText(currentQrUrl);
+            alert("QR-Check-In-Link wurde in die Zwischenablage kopiert:\n" + currentQrUrl);
+        }
+
+        function enterKioskMode() {
+            document.getElementById('main-header').classList.add('hidden');
+            document.getElementById('view-tech-players-main').classList.add('hidden');
+            document.getElementById('view-qr-kiosk').classList.remove('hidden');
+            window.history.replaceState({}, '', 'tech-players?kiosk=1');
+        }
+
+        function exitKioskMode() {
+            document.getElementById('main-header').classList.remove('hidden');
+            document.getElementById('view-qr-kiosk').classList.add('hidden');
+            document.getElementById('view-tech-players-main').classList.remove('hidden');
+            window.history.replaceState({}, '', 'tech-players');
+        }
+
+        function renderPlayersList() {
+            const container = document.getElementById('players-list-container');
+            document.getElementById('players-count').innerText = playersDB.length;
+
+            if (playersDB.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted);"><i>Noch keine verknüpften Spieler-Profile angelegt.</i></p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            playersDB.forEach(pl => {
+                const pinBadge = pl.hasPin
+                    ? '<span class="badge-verified">PIN-Schutz aktiv</span>'
+                    : '<span style="color:var(--text-muted); font-size:12px;">Ohne PIN</span>';
+
+                const customTagsList = [];
+                if (pl.flipperTags) {
+                    Object.entries(pl.flipperTags).forEach(([pinId, tagVal]) => {
+                        const pinObj = pinballs.find(p => String(p.id) === String(pinId));
+                        if (pinObj && tagVal) {
+                            customTagsList.push(`${pinObj.name}: <strong style="color:var(--gold-light);">${tagVal}</strong>`);
+                        }
+                    });
+                }
+
+                const customTagsHtml = customTagsList.length > 0
+                    ? `<div style="font-size: 13px; margin-top: 6px; color: var(--text-muted);">Flipper-spezifisch: ${customTagsList.join(' | ')}</div>`
+                    : '';
+
+                container.innerHTML += `
+                    <div class="report-comment" style="border-left: 4px solid var(--gold-mid);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                            <div>
+                                <strong style="font-size:17px; color:var(--gold-light);">${pl.displayName}</strong>
+                                <span style="margin-left:10px; font-size:14px;">3er-Kürzel: <strong>${pl.shortInitials}</strong></span>
+                                <span style="margin-left:10px;">${pinBadge}</span>
+                                <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+                                    Erkannte Eingaben: ${pl.aliases.join(', ') || pl.shortInitials}
+                                </div>
+                                ${customTagsHtml}
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button class="btn-switch" onclick="openPlayerModal(${pl.id})">Bearbeiten</button>
+                                <button class="btn-report" onclick="deletePlayerProfile(${pl.id})">Löschen</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function openPlayerModal(playerId = null) {
+            editingPlayerId = playerId;
+            const titleEl = document.getElementById('player-modal-title');
+            const dispInput = document.getElementById('pl-display-name');
+            const shortInput = document.getElementById('pl-short-tag');
+            const aliasInput = document.getElementById('pl-aliases');
+            const pinInput = document.getElementById('pl-pin-code');
+            const clearPinWrap = document.getElementById('pl-clear-pin-wrap');
+            const clearPinCheck = document.getElementById('pl-clear-pin');
+            const perFlipperBox = document.getElementById('pl-per-flipper-inputs');
+
+            pinInput.value = '';
+            clearPinCheck.checked = false;
+
+            const target = playerId ? playersDB.find(p => p.id === playerId) : null;
+
+            if (!target) {
+                titleEl.innerText = 'Neues Spieler-Profil anlegen';
+                dispInput.value = '';
+                shortInput.value = '';
+                aliasInput.value = '';
+                clearPinWrap.classList.add('hidden');
+            } else {
+                titleEl.innerText = `Profil bearbeiten: ${target.displayName}`;
+                dispInput.value = target.displayName;
+                shortInput.value = target.shortInitials;
+                aliasInput.value = target.aliases.join(', ');
+                if (target.hasPin) clearPinWrap.classList.remove('hidden');
+                else clearPinWrap.classList.add('hidden');
+            }
+
+            // Eingabefelder für alle Flipper mit hsMaxLength > 3 (z.B. Stern / JJP) aufbauen
+            const longNamePins = pinballs.filter(p => p.hsMaxLength > 3);
+            perFlipperBox.innerHTML = '';
+            if (longNamePins.length === 0) {
+                perFlipperBox.innerHTML = '<i style="font-size:12px; color:var(--text-muted);">Keine Flipper mit > 3 Zeichen in der Datenbank gefunden.</i>';
+            } else {
+                longNamePins.forEach(p => {
+                    const existingVal = (target && target.flipperTags && target.flipperTags[String(p.id)]) ? target.flipperTags[String(p.id)] : '';
+                    perFlipperBox.innerHTML += `
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+                            <span style="font-size:13px; flex:1;">${p.name} <span style="color:var(--text-muted);">(${p.maker}, max. ${p.hsMaxLength})</span>:</span>
+                            <input type="text" class="pl-flipper-tag-input" data-pin-id="${p.id}" maxlength="${p.hsMaxLength}" value="${existingVal}" placeholder="Standard" style="width:160px; margin:0; padding:6px 8px;" oninput="this.value = this.value.toUpperCase()">
+                        </div>
+                    `;
+                });
+            }
+
+            document.getElementById('player-edit-modal').classList.remove('hidden');
+        }
+
+        function closePlayerModal() {
+            document.getElementById('player-edit-modal').classList.add('hidden');
+            editingPlayerId = null;
+        }
+
+        async function savePlayerProfileForm() {
+            const dispName = document.getElementById('pl-display-name').value.trim();
+            const shortTag = document.getElementById('pl-short-tag').value.trim().toUpperCase();
+            const rawAliases = document.getElementById('pl-aliases').value;
+            const newPin = document.getElementById('pl-pin-code').value.trim();
+            const clearPin = document.getElementById('pl-clear-pin').checked;
+
+            if (!dispName || !shortTag) {
+                alert("Bitte gib mindestens einen Haupt-Anzeigenamen und das 3er-Standardkürzel ein!");
+                return;
+            }
+
+            const aliasSet = new Set([shortTag, dispName.toUpperCase()]);
+            rawAliases.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).forEach(a => aliasSet.add(a));
+
+            const flipperTagsMap = {};
+            document.querySelectorAll('.pl-flipper-tag-input').forEach(inp => {
+                const val = inp.value.trim().toUpperCase();
+                if (val) {
+                    flipperTagsMap[inp.dataset.pinId] = val;
+                    aliasSet.add(val);
+                }
+            });
+
+            const saveBtn = document.getElementById('pl-save-btn');
+            saveBtn.disabled = true;
+
+            try {
+                const { error } = await db.rpc('save_player_profile', {
+                    p_id: editingPlayerId,
+                    p_display_name: dispName,
+                    p_short_tag: shortTag,
+                    p_aliases: Array.from(aliasSet),
+                    p_flipper_tags: flipperTagsMap,
+                    p_new_pin: newPin,
+                    p_clear_pin: clearPin
+                });
+
+                if (error) throw error;
+
+                saveBtn.disabled = false;
+                closePlayerModal();
+                await loadAllDatabaseData();
+                renderPlayersList();
+            } catch (err) {
+                alert("Fehler beim Speichern: " + err.message);
+                saveBtn.disabled = false;
+            }
+        }
+
+        async function deletePlayerProfile(playerId) {
+            if (!confirm("Möchtest du dieses Spieler-Profil wirklich löschen?")) return;
+            const { error } = await db.from('players').delete().eq('id', playerId);
+            if (error) {
+                alert("Fehler beim Löschen: " + error.message);
+                return;
+            }
+            await loadAllDatabaseData();
+            renderPlayersList();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => renderPlayersList());
+            if (!isLoggedIn) {
+                window.location.href = './#login';
+                return;
+            }
+            if (!isTechMode) {
+                isTechMode = true;
+                localStorage.setItem('pinplay_tech_mode', 'true');
+                renderSharedHeader();
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('kiosk') === '1') {
+                enterKioskMode();
+            }
+
+            renderPlayersList();
+            loadAndRenderDailyQr();
+            // Aktualisiert den QR-Code im Kiosk-Betrieb alle 15 Minuten automatisch
+            setInterval(loadAndRenderDailyQr, 15 * 60 * 1000);
+        });
+    </script>
+</body>
+</html>

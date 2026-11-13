@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pinplay-static-v8';
+const CACHE_NAME = 'pinplay-static-v10';
 const STATIC_ASSETS = [
     'index.html',
     'detail.html',
@@ -6,14 +6,14 @@ const STATIC_ASSETS = [
     'techniker.html',
     'tech-detail.html',
     'tech-feedback.html',
-    'tech-players.html'
+    'tech-players.html',
     'style.css',
     'app.js',
     'logo.png',
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+    'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
 ];
 
-// 1. Beim ersten Start alle HTML-, CSS- und JS-Dateien im Voraus herunterladen
 self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
@@ -21,7 +21,6 @@ self.addEventListener('install', (event) => {
     );
 });
 
-// 2. Alte Caches aufräumen und sofort die Kontrolle übernehmen
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((keys) =>
@@ -30,29 +29,37 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// 3. Seitenwechsel abfangen und in 0 ms aus dem lokalen Speicher beantworten
 self.addEventListener('fetch', (event) => {
     const req = event.request;
     if (req.method !== 'GET') return;
 
     const url = new URL(req.url);
 
-    // Datenbank-Abfragen an Supabase NIEMALS im Service Worker abfangen
-    // (Ausnahme: öffentliche Flipper-Fotos dürfen gecacht werden)
     if (url.hostname.includes('supabase.co') && !url.pathname.includes('/flipper-fotos/')) {
         return;
     }
 
-    // Für alle eigenen HTML-, CSS- und JS-Dateien sowie das Supabase-Skript:
-    // ignoreSearch: true sorgt dafür, dass detail.html?id=5 sofort die gespeicherte detail.html nutzt!
     event.respondWith(
         caches.open(CACHE_NAME).then(async (cache) => {
             const isLocalPageOrAsset = url.origin === self.location.origin;
-            const cachedResponse = await cache.match(req, {
+
+            // 1. Direkter Treffer im Cache
+            let cachedResponse = await cache.match(req, {
                 ignoreSearch: isLocalPageOrAsset
             });
 
-            // Im Hintergrund still nach Datei-Updates schauen (falls du am Code arbeitest)
+            // 2. Falls eine saubere URL ohne ".html" (z.B. /highscores oder /detail?id=1) aufgerufen wird,
+            //    automatisch die passende .html-Vorlage aus dem Cache holen
+            if (!cachedResponse && isLocalPageOrAsset) {
+                let fallbackPath = url.pathname;
+                if (fallbackPath.endsWith('/')) {
+                    fallbackPath += 'index.html';
+                } else if (!fallbackPath.includes('.')) {
+                    fallbackPath += '.html';
+                }
+                cachedResponse = await cache.match(fallbackPath, { ignoreSearch: true });
+            }
+
             const networkFetch = fetch(req).then((networkResponse) => {
                 if (networkResponse && networkResponse.status === 200) {
                     const cacheKey = isLocalPageOrAsset ? url.pathname : req;
@@ -61,7 +68,6 @@ self.addEventListener('fetch', (event) => {
                 return networkResponse;
             }).catch(() => cachedResponse);
 
-            // Wenn schon im Speicher -> SOFORT (0 ms) zurückgeben, sonst auf Netzwerk warten
             return cachedResponse || networkFetch;
         })
     );

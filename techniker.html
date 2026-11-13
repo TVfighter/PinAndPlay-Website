@@ -61,7 +61,7 @@
             if (bCount > 0) badges.push(`<span class="count-b" title="${bCount}x Prio 3 (Kaum spürbar)">${bCount}</span>`);
             if (uCount > 0) badges.push(`<span class="count-u" title="${uCount}x Noch unverifiziert">${uCount}</span>`);
 
-            return `<div class="meldungen-counts" onclick="window.location.href='tech-detail.html?id=${pinballId}'">${badges.join('')}</div>`;
+            return `<div class="meldungen-counts" onclick="window.location.href='tech-detail?id=${pinballId}'">${badges.join('')}</div>`;
         }
 
         function getReportSortWeight(pinballId) {
@@ -113,7 +113,7 @@
                 tbody.innerHTML += `
                     <tr>
                         <td><strong style="color:var(--gold-light);">${p.short}</strong></td>
-                        <td><span class="clickable-name" onclick="window.location.href='tech-detail.html?id=${p.id}'">${p.name}</span></td>
+                        <td><span class="clickable-name" onclick="window.location.href='tech-detail?id=${p.id}'">${p.name}</span></td>
                         <td><span class="status-color-box ${statusColorClass}" title="${statusTooltip}"></span></td>
                         <td>${getReportCountsHtml(p.id)}</td>
                         <td>
@@ -171,7 +171,7 @@
         window.addEventListener('DOMContentLoaded', async () => {
             await initSharedApp(() => renderTechTableBody());
             if (!isLoggedIn) {
-                window.location.href = 'index.html#login';
+                window.location.href = './#login';
                 return;
             }
             if (!isTechMode) {

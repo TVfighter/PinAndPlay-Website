@@ -12,7 +12,7 @@
     <div class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="window.location.href='techniker.html'" title="Zurück zum Techniker-Dashboard">←</button>
+                <button class="btn-back" onclick="window.location.href='techniker'" title="Zurück zum Techniker-Dashboard">←</button>
                 <h2 style="margin: 0;">Eingegangenes Spieler-Feedback (<span id="feedback-total-count">0</span>)</h2>
             </div>
             <div class="detail-header-actions">
@@ -104,14 +104,14 @@
         window.addEventListener('DOMContentLoaded', async () => {
             await initSharedApp(() => {
                 if (!isLoggedIn) {
-                    window.location.href = 'index.html#login';
+                    window.location.href = './#login';
                     return;
                 }
                 renderFeedbackList();
             });
 
             if (!isLoggedIn) {
-                window.location.href = 'index.html#login';
+                window.location.href = './#login';
                 return;
             }
             if (!isTechMode) {

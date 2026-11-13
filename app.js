@@ -1,16 +1,40 @@
-// 1. Tages-Token aus QR-Code-Scan (?token=...) sofort auslesen und speichern
+// 1. Tages-Token (?token=...) und Herkunft (?from=...) sofort auslesen und aus der Adresszeile entfernen
 const DAILY_TOKEN_KEY = 'pinplay_daily_token';
-(function captureQrTokenFromUrl() {
+const NAV_FROM_KEY = 'pinplay_nav_origin';
+let navOriginFrom = sessionStorage.getItem(NAV_FROM_KEY) || '';
+
+(function cleanUrlParameters() {
     const params = new URLSearchParams(window.location.search);
+    let urlChanged = false;
+
     const scannedToken = params.get('token');
     if (scannedToken && scannedToken.trim() !== '') {
         localStorage.setItem(DAILY_TOKEN_KEY, scannedToken.trim().toUpperCase());
         params.delete('token');
+        urlChanged = true;
+    }
+
+    if (params.has('from')) {
+        navOriginFrom = params.get('from') || '';
+        sessionStorage.setItem(NAV_FROM_KEY, navOriginFrom);
+        params.delete('from');
+        urlChanged = true;
+    } else {
+        const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
+        const isReload = navEntries && navEntries.length > 0 && navEntries[0].type === 'reload';
+        if (!isReload) {
+            navOriginFrom = '';
+            sessionStorage.removeItem(NAV_FROM_KEY);
+        }
+    }
+
+    if (urlChanged) {
         const cleanQuery = params.toString();
         const cleanUrl = window.location.pathname + (cleanQuery ? `?${cleanQuery}` : '') + window.location.hash;
         window.history.replaceState({}, '', cleanUrl);
     }
 })();
+
 
 // Supabase initialisieren (inkl. Übergabe des gespeicherten Tages-Tokens im Header)
 const supabaseUrl = 'https://gwvxctkowtiyfrhoozhj.supabase.co';
@@ -25,7 +49,7 @@ const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
 });
 
 // Ziel-URL für das Pin&Play-Logo (Offizielle Homepage)
-const OFFICIAL_HOMEPAGE_URL = 'index.html';
+const OFFICIAL_HOMEPAGE_URL = './';
 
 // Schlüssel für den dauerhaften Browser-Speicher
 const CACHE_KEY_STATE = 'pinplay_full_data_cache_v5';
@@ -155,9 +179,9 @@ function getFormattedPlayerDisplay(rawInitials) {
 // Ermittelt, welcher Haupt-Tab oben im Banner gerade aktiv ist
 function getActiveNavTab() {
     const path = window.location.pathname;
-    if (path.endsWith('highscores.html') || path.endsWith('/highscores')) return 'highscores';
-    if (path.endsWith('tech-feedback.html') || path.endsWith('/tech-feedback')) return 'tech-feedback';
-    if (path.endsWith('tech-players.html') || path.endsWith('/tech-players')) return 'tech-players';
+    if (path.endsWith('highscores') || path.endsWith('/highscores')) return 'highscores';
+    if (path.endsWith('tech-feedback') || path.endsWith('/tech-feedback')) return 'tech-feedback';
+    if (path.endsWith('tech-players') || path.endsWith('/tech-players')) return 'tech-players';
     return 'overview';
 }
 
@@ -177,8 +201,8 @@ function renderSharedHeader() {
     const fbCountSuffix = feedbackDB.length > 0 ? ` (${feedbackDB.length})` : '';
     const techExtraBtnsHtml = (isLoggedIn && isTechMode)
         ? `
-            <button class="${techPlayersClass}" onclick="window.location.href='tech-players.html'">Kürzel &amp; QR-Code</button>
-            <button class="${techFeedbackClass}" onclick="window.location.href='tech-feedback.html'">Spieler-Feedback${fbCountSuffix}</button>
+            <button class="${techPlayersClass}" onclick="window.location.href='tech-players'">Kürzel &amp; QR-Code</button>
+            <button class="${techFeedbackClass}" onclick="window.location.href='tech-feedback'">Spieler-Feedback${fbCountSuffix}</button>
         `
         : '';
 
@@ -188,7 +212,7 @@ function renderSharedHeader() {
         </a>
         <div class="quick-actions">
             <button class="${overviewClass}" onclick="goHome()">Flipper Übersicht</button>
-            <button class="${highscoresClass}" onclick="window.location.href='highscores.html'">Highscores</button>
+            <button class="${highscoresClass}" onclick="window.location.href='highscores'">Highscores</button>
             ${techExtraBtnsHtml}
             <button class="btn-nav-page" onclick="toggleTechMode()" id="tech-toggle" style="display: ${isLoggedIn ? 'inline-block' : 'none'};">
                 Techniker Modus: ${isTechMode ? 'AN' : 'AUS'}
@@ -229,7 +253,7 @@ function checkHashLogin() {
         if (isLoggedIn) {
             window.location.hash = '';
             localStorage.setItem('pinplay_tech_mode', 'true');
-            window.location.href = 'techniker.html';
+            window.location.href = 'techniker';
         } else {
             modal.classList.remove('hidden');
         }
@@ -257,7 +281,7 @@ async function doLogin() {
         localStorage.setItem('pinplay_logged_in', 'true');
         localStorage.setItem('pinplay_tech_mode', 'true');
         localStorage.removeItem(CACHE_KEY_STATE);
-        window.location.href = 'techniker.html';
+        window.location.href = 'techniker';
     }
 }
 
@@ -267,12 +291,12 @@ async function doLogout() {
     localStorage.removeItem('pinplay_tech_mode');
     localStorage.removeItem('pinplay_logged_in');
     localStorage.removeItem(CACHE_KEY_STATE);
-    window.location.href = 'index.html';
+    window.location.href = './';
 }
 
 function goHome() {
-    if (isTechMode) window.location.href = 'techniker.html';
-    else window.location.href = 'index.html';
+    if (isTechMode) window.location.href = 'techniker';
+    else window.location.href = './';
 }
 
 function toggleTechMode() {
@@ -283,23 +307,23 @@ function toggleTechMode() {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
-    const fromSuffix = params.get('from') ? `&from=${params.get('from')}` : '';
+    const fromSuffix = navOriginFrom ? `&from=${navOriginFrom}` : '';
 
     if (isTechMode) {
-        if ((path.endsWith('detail.html') || path.endsWith('/detail')) && id) {
-            window.location.href = `tech-detail.html?id=${id}${fromSuffix}`;
-        } else if (path.endsWith('highscores.html') || path.endsWith('/highscores')) {
+        if ((path.endsWith('detail') || path.endsWith('/detail')) && id) {
+            window.location.href = `tech-detail?id=${id}${fromSuffix}`;
+        } else if (path.endsWith('highscores') || path.endsWith('/highscores')) {
             window.location.reload();
         } else {
-            window.location.href = 'techniker.html';
+            window.location.href = 'techniker';
         }
     } else {
-        if ((path.endsWith('tech-detail.html') || path.endsWith('/tech-detail')) && id) {
-            window.location.href = `detail.html?id=${id}${fromSuffix}`;
-        } else if (path.endsWith('highscores.html') || path.endsWith('/highscores')) {
+        if ((path.endsWith('tech-detail') || path.endsWith('/tech-detail')) && id) {
+            window.location.href = `detail?id=${id}${fromSuffix}`;
+        } else if (path.endsWith('highscores') || path.endsWith('/highscores')) {
             window.location.reload();
         } else {
-            window.location.href = 'index.html';
+            window.location.href = './';
         }
     }
 }

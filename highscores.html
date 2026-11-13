@@ -140,12 +140,12 @@
                     : `<span class="badge-inactive-icon" title="${p.name} ist derzeit außer Betrieb (Keine Highscore-Eintragung möglich)">!</span>`;
 
                 const techUnverifBadgeHtml = hasUnverifiedForTech
-                    ? `<span class="badge-unverified-hs" onclick="window.location.href='tech-detail.html?id=${p.id}&tab=highscore&from=highscores'" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} im Techniker-Menü zu prüfen">${unverifiedHsCount} unverifiziert</span>`
+                    ? `<span class="badge-unverified-hs" onclick="window.location.href='tech-detail?id=${p.id}&tab=highscore&from=highscores'" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} im Techniker-Menü zu prüfen">${unverifiedHsCount} unverifiziert</span>`
                     : '';
 
                 const detailTargetUrl = isTechMode
-                    ? `tech-detail.html?id=${p.id}&from=highscores`
-                    : `detail.html?id=${p.id}&from=highscores`;
+                    ? `tech-detail?id=${p.id}&from=highscores`
+                    : `detail?id=${p.id}&from=highscores`;
 
                 const rowClass = hasUnverifiedForTech ? 'unverified-hs-row' : '';
 
@@ -269,13 +269,13 @@
         function goBackFromHighscoreSubmit() {
             const selectedId = Number(document.getElementById('hs-pinball-select').value) || originPinballId;
             if (originSource === 'detail' && selectedId) {
-                window.location.href = `detail.html?id=${selectedId}`;
+                window.location.href = `detail?id=${selectedId}`;
             } else if (originSource === 'tech-detail' && selectedId) {
-                window.location.href = `tech-detail.html?id=${selectedId}&tab=highscore`;
+                window.location.href = `tech-detail?id=${selectedId}&tab=highscore`;
             } else {
                 document.getElementById('view-highscore-submit').classList.add('hidden');
                 document.getElementById('view-highscores').classList.remove('hidden');
-                window.history.replaceState({}, '', 'highscores.html');
+                window.history.replaceState({}, '', 'highscores');
                 renderHighscoreOverview(selectedId);
             }
         }
@@ -549,7 +549,7 @@
         window.addEventListener('DOMContentLoaded', async () => {
             const params = new URLSearchParams(window.location.search);
             originPinballId = params.get('id') ? Number(params.get('id')) : null;
-            originSource = params.get('from') || 'highscores';
+            originSource = navOriginFrom || 'highscores';
 
             await initSharedApp(() => {
                 if (document.getElementById('view-highscore-submit').classList.contains('hidden')) {

@@ -205,11 +205,11 @@
 
         function goBackFromTechDetail() {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('from') === 'highscores') {
+            if (navOriginFrom === 'highscores') {
                 const idParam = currentPinball ? `?id=${currentPinball.id}` : '';
-                window.location.href = `highscores.html${idParam}`;
+                window.location.href = `highscores${idParam}`;
             } else {
-                window.location.href = 'techniker.html';
+                window.location.href = 'techniker';
             }
         }
 
@@ -227,7 +227,7 @@
 
         function goToTechHighscoreSubmit() {
             if (!currentPinball) return;
-            window.location.href = `highscores.html?submit=1&id=${currentPinball.id}&from=tech-detail`;
+            window.location.href = `highscores?submit=1&id=${currentPinball.id}&from=tech-detail`;
         }
 
         async function handleTechDetailPowerClick() {
@@ -832,7 +832,7 @@
 
             await initSharedApp(() => {
                 if (!isLoggedIn) {
-                    window.location.href = 'index.html#login';
+                    window.location.href = './#login';
                     return;
                 }
                 currentPinball = pinballs.find(p => p.id === pinId);
@@ -843,7 +843,7 @@
             });
 
             if (!isLoggedIn) {
-                window.location.href = 'index.html#login';
+                window.location.href = './#login';
                 return;
             }
             if (!isTechMode) {
@@ -854,7 +854,7 @@
 
             currentPinball = pinballs.find(p => p.id === pinId);
             if (!currentPinball) {
-                window.location.href = 'techniker.html';
+                window.location.href = 'techniker';
                 return;
             }
 

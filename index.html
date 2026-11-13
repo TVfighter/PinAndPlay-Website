@@ -64,7 +64,7 @@
                 const aktivLabel = p.isAktiv ? '' : '<br><span style="color: var(--gold-mid); font-size: 13px; font-weight: normal;">(Derzeit nicht in Aufstellung)</span>';
                 const cardStyle = p.isAktiv ? '' : 'opacity: 0.45; filter: grayscale(65%);';
                 const imgHtml = p.imgUrl ? `<img src="${p.imgUrl}" alt="${p.name}" loading="lazy">` : '';
-                const targetUrl = isTechMode ? `tech-detail.html?id=${p.id}` : `detail.html?id=${p.id}`;
+                const targetUrl = isTechMode ? `tech-detail?id=${p.id}` : `detail?id=${p.id}`;
 
                 grid.innerHTML += `
                     <div class="flipper-card" onclick="window.location.href='${targetUrl}'" style="${cardStyle}">

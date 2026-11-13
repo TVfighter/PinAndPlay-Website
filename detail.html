@@ -71,11 +71,11 @@
 
         function goBackFromDetail() {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('from') === 'highscores') {
+            if (navOriginFrom === 'highscores') {
                 const idParam = currentPinball ? `?id=${currentPinball.id}` : '';
-                window.location.href = `highscores.html${idParam}`;
+                window.location.href = `highscores${idParam}`;
             } else {
-                window.location.href = 'index.html';
+                window.location.href = './';
             }
         }
 
@@ -125,7 +125,7 @@
 
         function goToHighscoreSubmit() {
             if (!currentPinball) return;
-            window.location.href = `highscores.html?submit=1&id=${currentPinball.id}&from=detail`;
+            window.location.href = `highscores?submit=1&id=${currentPinball.id}&from=detail`;
         }
 
         function openUserReportView() {
@@ -221,7 +221,7 @@
 
             currentPinball = pinballs.find(p => p.id === pinId);
             if (!currentPinball) {
-                window.location.href = 'index.html';
+                window.location.href = './';
                 return;
             }
             renderDetailView();
