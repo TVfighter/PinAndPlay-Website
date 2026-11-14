@@ -1,12 +1,5 @@
-const CACHE_NAME = 'pinplay-static-v14';
+const CACHE_NAME = 'pinplay-static-v15';
 const STATIC_ASSETS = [
-    'index.html',
-    'detail.html',
-    'highscores.html',
-    'techniker.html',
-    'tech-detail.html',
-    'tech-feedback.html',
-    'tech-players.html',
     'style.css',
     'app.js',
     'logo.png',
@@ -35,34 +28,39 @@ self.addEventListener('fetch', (event) => {
 
     const url = new URL(req.url);
 
+    // 1. Browser-Erweiterungen (z.B. chrome-extension://) sofort ignorieren
+    if (!url.protocol.startsWith('http')) return;
+
+    // 2. HTML-Seitenwechsel immer direkt über den Server laden (verhindert 'Site can't be reached')
+    if (
+        req.mode === 'navigate' ||
+        req.destination === 'document' ||
+        (req.headers.get('accept') || '').includes('text/html')
+    ) {
+        return;
+    }
+
+    // 3. Datenbank-Abfragen an Supabase niemals im Service Worker cachen
     if (url.hostname.includes('supabase.co') && !url.pathname.includes('/flipper-fotos/')) {
         return;
     }
 
+    // 4. Statische Dateien (CSS, JS, Logo, Flipper-Fotos) aus dem Cache liefern
     event.respondWith(
         caches.open(CACHE_NAME).then(async (cache) => {
-            const isLocalPageOrAsset = url.origin === self.location.origin;
+            const isLocalAsset = url.origin === self.location.origin;
 
-            // 1. Direkter Treffer im Cache
             let cachedResponse = await cache.match(req, {
-                ignoreSearch: isLocalPageOrAsset
+                ignoreSearch: isLocalAsset
             });
 
-            // 2. Falls eine saubere URL ohne ".html" (z.B. /highscores oder /detail?id=1) aufgerufen wird,
-            //    automatisch die passende .html-Vorlage aus dem Cache holen
-            if (!cachedResponse && isLocalPageOrAsset) {
-                let fallbackPath = url.pathname;
-                if (fallbackPath.endsWith('/')) {
-                    fallbackPath += 'index.html';
-                } else if (!fallbackPath.includes('.')) {
-                    fallbackPath += '.html';
-                }
-                cachedResponse = await cache.match(fallbackPath, { ignoreSearch: true });
+            if (cachedResponse && cachedResponse.redirected) {
+                cachedResponse = null;
             }
 
             const networkFetch = fetch(req).then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
-                    const cacheKey = isLocalPageOrAsset ? url.pathname : req;
+                if (networkResponse && networkResponse.status === 200 && !networkResponse.redirected) {
+                    const cacheKey = isLocalAsset ? url.pathname : req;
                     cache.put(cacheKey, networkResponse.clone());
                 }
                 return networkResponse;
