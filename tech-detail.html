@@ -28,7 +28,7 @@
             <div class="detail-right">
                 <div class="info-box">
                     <strong>Highscore:</strong> <span id="tech-detail-score"></span>
-                    <button class="btn-add-score" onclick="goToTechHighscoreSubmit()" title="Highscore direkt verifiziert eintragen">+</button><br>
+                    <button class="btn-add-score" onclick="goToTechHighscoreSubmit()" title="Neuen Highscore eintragen">+</button><br>
                     <strong>Baujahr:</strong> <span id="tech-detail-year"></span><br>
                     <strong>Hersteller:</strong> <span id="tech-detail-maker"></span><br>
                     <strong>Designer:</strong> <span id="tech-detail-designer"></span><br>
@@ -105,7 +105,7 @@
 
             <div id="highscore-visual-banner" class="highscore-archive-banner hidden">
                 <span>Highscore-Prüfung &amp; Bestenliste für dieses Gerät.</span>
-                <span style="font-size: 13px; font-weight: normal;">Unverifizierte Einsendungen stehen standardmäßig ganz oben.</span>
+                <span style="font-size: 13px; font-weight: normal;">Klicke auf „Verifizieren“, um das Beweisfoto im Popout zu prüfen.</span>
             </div>
 
             <div id="tech-detail-reports"></div>
@@ -196,6 +196,39 @@
         </div>
     </div>
 
+    <!-- TECHNIKER POPUP 4 (MODAL): Beweisfoto im Popout prüfen & Highscore verifizieren -->
+    <div id="tech-verify-hs-modal" class="modal-overlay hidden" onclick="handleModalBackdropClick(event, 'tech-verify-hs-modal')">
+        <div class="modal-box" style="max-width: 620px;">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 style="margin: 0;">Highscore &amp; Beweisfoto prüfen</h3>
+                <button class="btn-switch" onclick="closeVerifyHighscoreModal()">Abbrechen</button>
+            </div>
+            <div>
+                <div id="verify-hs-summary" style="background: var(--surface-elevated); border-left: 4px solid var(--gold-mid); padding: 12px 15px; border-radius: 6px; margin-bottom: 15px; font-size: 15px; line-height: 1.6;"></div>
+
+                <div style="font-size: 13px; font-weight: bold; color: var(--gold-light); margin-bottom: 6px;">
+                    Eingereichtes Beweisfoto vom Flipper-Display:
+                </div>
+                <div id="verify-hs-photo-container" style="background: #0f1115; border: 1px solid var(--border-light); border-radius: 6px; padding: 14px; text-align: center; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 14px;">
+                    <i>Lade Beweisfoto...</i>
+                </div>
+
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 15px 0; text-align: center;">
+                    Beim Klick auf <strong>„Jetzt verifizieren“</strong> wird dieser Highscore freigeschaltet und das Beweisfoto automatisch aus der Datenbank gelöscht.
+                </p>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button id="verify-hs-confirm-btn" class="btn-green" style="flex: 2; padding: 14px; font-size: 15px;" onclick="confirmVerifyHighscore()">
+                        ✓ Foto bestätigt — Jetzt verifizieren &amp; Foto löschen
+                    </button>
+                    <button id="verify-hs-reject-btn" class="btn-report" style="flex: 1; padding: 14px;" onclick="rejectHighscoreFromModal()">
+                        Ablehnen &amp; Löschen
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
     <script>
@@ -204,6 +237,7 @@
         let editingReportId = null;
         let resolvingReportId = null;
         let mergingSourceReportId = null;
+        let verifyingHsId = null;
 
         let activeReportFilters = { u: true, 1: true, 2: true, 3: true };
         let activeHsFilters = { unverif: true, verif: true };
@@ -446,18 +480,15 @@
                 const dateStr = new Date(h.date).toLocaleDateString('de-DE');
                 const formattedPlayer = getFormattedPlayerDisplay(h.initials);
                 const safeInit = formattedPlayer.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                const safeFoto = h.beweisfoto.replace(/'/g, "\\'");
+                const safeFoto = (h.beweisfoto || '').replace(/'/g, "\\'");
                 const borderColor = h.verifiziert ? 'var(--status-green)' : 'var(--gold-mid)';
                 const badgeHtml = h.verifiziert
                     ? '<span class="badge-verified">Verifiziert</span>'
                     : '<span class="badge-unverified">Wartet auf Verifizierung</span>';
 
-                const photoBtn = h.beweisfoto
-                    ? `<button id="btn-hs-photo-${h.id}" class="btn-switch" onclick="togglePrivatePhoto('hs-photo-box-${h.id}', 'btn-hs-photo-${h.id}', '${safeFoto}', 'Beweisfoto ansehen', 'Beweisfoto ausblenden')">Beweisfoto ansehen</button>`
-                    : '';
-
+                // Klick auf "Verifizieren" öffnet zuerst das Popout-Fenster mit dem Beweisfoto
                 const verifyBtn = !h.verifiziert
-                    ? `<button class="btn-green" onclick="verifyHighscore(${h.id})">Verifizieren</button>`
+                    ? `<button class="btn-green" onclick="openVerifyHighscoreModal(${h.id})">Verifizieren</button>`
                     : '';
 
                 container.innerHTML += `
@@ -469,25 +500,83 @@
                                 <span style="color:var(--text-muted); font-size:13px;">(${dateStr})</span>
                             </div>
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                                ${photoBtn}
                                 ${verifyBtn}
                                 <button class="btn-report" onclick="deleteHighscore(${h.id}, '${safeFoto}')">Löschen</button>
                             </div>
                         </div>
-                        <div id="hs-photo-box-${h.id}" style="margin-top:10px; display:none;"></div>
                     </div>
                 `;
             });
         }
 
-        async function verifyHighscore(hsId) {
+        // --- POPOUT-MODAL FÜR HIGHSCORE-VERIFIZIERUNG MIT BEWEISFOTO-VORSCHAU & FOTO-LÖSCHUNG ---
+
+        async function openVerifyHighscoreModal(hsId) {
             const target = highscoresDB.find(h => h.id === hsId);
+            if (!target) return;
+
+            verifyingHsId = hsId;
+            const summaryEl = document.getElementById('verify-hs-summary');
+            const photoContainer = document.getElementById('verify-hs-photo-container');
+            const confirmBtn = document.getElementById('verify-hs-confirm-btn');
+
+            confirmBtn.disabled = false;
+            confirmBtn.classList.remove('btn-busy');
+            confirmBtn.innerText = "✓ Foto bestätigt — Jetzt verifizieren & Foto löschen";
+
+            const formattedPlayer = getFormattedPlayerDisplay(target.initials).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const dateStr = formatDateTime(target.date);
+
+            summaryEl.innerHTML = `
+                Flipper: <strong style="color:var(--gold-light);">${currentPinball ? currentPinball.name : '-'}</strong><br>
+                Spieler / Kürzel: <strong style="color:var(--gold-light);">${formattedPlayer}</strong><br>
+                Eingereichte Punktzahl: <strong style="font-size:18px; color:#7ee787;">${formatScore(target.score)} Punkte</strong><br>
+                Eingereicht am: <span style="color:var(--text-muted); font-size:13px;">${dateStr}</span>
+            `;
+
+            document.getElementById('tech-verify-hs-modal').classList.remove('hidden');
+
+            if (!target.beweisfoto) {
+                photoContainer.innerHTML = `
+                    <div style="color: #ff7b72; font-weight: bold; padding: 20px;">
+                        ⚠️ Zu diesem älteren Eintrag wurde kein Beweisfoto gespeichert.
+                    </div>
+                `;
+                return;
+            }
+
+            photoContainer.innerHTML = '<i>Lade geschütztes Beweisfoto...</i>';
+            const { data, error } = await db.storage.from('fotos-incoming').createSignedUrl(target.beweisfoto, 300);
+
+            if (error || !data?.signedUrl) {
+                photoContainer.innerHTML = `<span style="color:var(--status-red);">Fehler beim Laden des Beweisfotos: ${error ? error.message : 'Unbekannt'}</span>`;
+                return;
+            }
+
+            photoContainer.innerHTML = `
+                <a href="${data.signedUrl}" target="_blank" title="Klicken, um das Beweisfoto in voller Originalgröße zu öffnen">
+                    <img src="${data.signedUrl}" alt="Beweisfoto" style="max-width: 100%; max-height: 380px; border-radius: 6px; border: 1px solid var(--gold-border); display: block;">
+                </a>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">
+                    Tipp: Klicke auf das Bild, um es in voller Größe in einem neuen Tab zu öffnen.
+                </div>
+            `;
+        }
+
+        function closeVerifyHighscoreModal() {
+            document.getElementById('tech-verify-hs-modal').classList.add('hidden');
+            verifyingHsId = null;
+        }
+
+        async function confirmVerifyHighscore() {
+            if (!verifyingHsId) return;
+            const target = highscoresDB.find(h => h.id === verifyingHsId);
             if (!target) return;
 
             const existingVerified = highscoresDB.filter(
                 h => h.pinballId === target.pinballId &&
                      h.verifiziert &&
-                     h.id !== hsId &&
+                     h.id !== target.id &&
                      isSamePlayerIdentity(h.initials, target.initials)
             );
 
@@ -499,14 +588,56 @@
                 }
             }
 
-            const { error } = await db.from('highscore').update({ verifiziert: true }).eq('id', hsId);
+            const confirmBtn = document.getElementById('verify-hs-confirm-btn');
+            confirmBtn.disabled = true;
+            confirmBtn.classList.add('btn-busy');
+            confirmBtn.innerText = "⏳ Verifiziere & lösche Beweisfoto...";
+
+            try {
+                // 1. Beweisfoto aus dem Storage löschen, sobald der Score verifiziert wird
+                if (target.beweisfoto) {
+                    await db.storage.from('fotos-incoming').remove([target.beweisfoto]);
+                }
+
+                // 2. Highscore auf verifiziert setzen und Foto-Verweis leeren
+                const { error } = await db.from('highscore').update({
+                    verifiziert: true,
+                    beweisfoto: ''
+                }).eq('id', target.id);
+
+                if (error) throw error;
+
+                // 3. Ältere niedrigere Rekorde desselben Spielers an diesem Gerät entfernen
+                await removeOldLowerPlayerScores(target.pinballId, target.initials, target.id, target.score);
+
+                closeVerifyHighscoreModal();
+                showActionToast(`✓ Highscore (${formatScore(target.score)}) verifiziert & Beweisfoto gelöscht!`, "success");
+                await refreshCurrentMachineData();
+            } catch (err) {
+                confirmBtn.disabled = false;
+                confirmBtn.classList.remove('btn-busy');
+                confirmBtn.innerText = "✓ Foto bestätigt — Jetzt verifizieren & Foto löschen";
+                alert("Fehler beim Verifizieren: " + err.message);
+            }
+        }
+
+        async function rejectHighscoreFromModal() {
+            if (!verifyingHsId) return;
+            const target = highscoresDB.find(h => h.id === verifyingHsId);
+            if (!target) return;
+
+            if (!confirm(`Diesen Highscore (${formatScore(target.score)} Punkte von ${target.initials}) wirklich ablehnen und samt Foto löschen?`)) return;
+
+            if (target.beweisfoto) {
+                await db.storage.from('fotos-incoming').remove([target.beweisfoto]);
+            }
+            const { error } = await db.from('highscore').delete().eq('id', target.id);
             if (error) {
-                alert("Fehler beim Verifizieren: " + error.message);
+                alert("Fehler beim Löschen: " + error.message);
                 return;
             }
-
-            await removeOldLowerPlayerScores(target.pinballId, target.initials, hsId, target.score);
-            showActionToast(`✓ Highscore (${formatScore(target.score)}) verifiziert!`, "success");
+            closeVerifyHighscoreModal();
+            showActionToast("Highscore abgelehnt und gelöscht.", "info");
             await refreshCurrentMachineData();
         }
 
@@ -607,7 +738,6 @@
                     ? `<span class="badge-verified">Verifiziert</span>`
                     : `<span class="badge-unverified">UNVERIFIZIERT (Neue Nutzermeldung)</span>`;
 
-                // Zeigt die Anzahl erst an, wenn mindestens eine weitere Meldung dazugemergt wurde (mergeCount >= 2)
                 const mergedBadgeHtml = r.mergeCount >= 2
                     ? `<span class="badge-merged" title="Besteht aus ${r.mergeCount} zusammengeführten Meldungen">🔗 ${r.mergeCount} Meldungen</span>`
                     : '';
@@ -773,10 +903,8 @@
             btn.innerText = "⏳ Führe Meldungen zusammen...";
 
             try {
-                // 1. Exakte Addition der Meldungs-Zähler (z.B. 2 + 2 = 4)
                 const newMergeCount = Number(targetReport.mergeCount || 1) + Number(sourceReport.mergeCount || 1);
 
-                // 2. E-Mail-Adressen ohne Duplikate zusammenführen
                 const emailSet = new Set();
                 if (targetReport.email) {
                     targetReport.email.split(',').map(s => s.trim()).filter(Boolean).forEach(e => emailSet.add(e));
@@ -786,7 +914,6 @@
                 }
                 const combinedEmails = Array.from(emailSet).join(', ');
 
-                // 3. Ziel-Meldung in der Datenbank aktualisieren
                 const { error: updateErr } = await db.from('reports').update({
                     merge_count: newMergeCount,
                     email: combinedEmails
@@ -794,7 +921,6 @@
 
                 if (updateErr) throw updateErr;
 
-                // 4. Fotos der angehängten Meldung löschen und angehängte Meldung entfernen
                 const filesToRemove = [];
                 if (sourceReport.foto_url) filesToRemove.push(sourceReport.foto_url);
                 if (sourceReport.loesung_foto_url) filesToRemove.push(sourceReport.loesung_foto_url);
@@ -870,6 +996,7 @@
                 if (modalId === 'tech-report-modal') closeTechReportModal();
                 if (modalId === 'tech-resolve-modal') closeResolveModal();
                 if (modalId === 'tech-merge-modal') closeMergeReportModal();
+                if (modalId === 'tech-verify-hs-modal') closeVerifyHighscoreModal();
             }
         }
 

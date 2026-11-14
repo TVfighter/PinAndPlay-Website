@@ -68,6 +68,7 @@
     <script src="app.js"></script>
     <script>
         let currentPinball = null;
+        let isSubmittingReport = false;
 
         function goBackFromDetail() {
             if (navOriginDetail === 'highscores') {
@@ -109,23 +110,19 @@
                 } else {
                     reportBtn.style.display = 'inline-block';
                     addScoreBtn.style.display = 'inline-flex';
-                    pwrBtn.style.display = 'inline-block';
                     pwrBtn.classList.remove('btn-busy');
 
                     if (currentPinball.power === 'OFF') {
                         pwrBtn.disabled = false;
+                        pwrBtn.style.display = 'inline-block';
                         pwrBtn.innerText = "Gerät anschalten";
                         pwrBtn.style.backgroundColor = 'var(--status-green)';
                         pwrBtn.style.color = 'white';
                         pwrBtn.style.borderColor = '#3fb950';
                         pwrBtn.style.cursor = 'pointer';
                     } else {
-                        pwrBtn.disabled = true;
-                        pwrBtn.innerText = "✓ Gerät ist eingeschaltet (ON)";
-                        pwrBtn.style.backgroundColor = '#16261b';
-                        pwrBtn.style.color = '#7ee787';
-                        pwrBtn.style.borderColor = '#2ea043';
-                        pwrBtn.style.cursor = 'default';
+                        // Keine dauerhafte Anzeige, wenn der Flipper bereits eingeschaltet ist
+                        pwrBtn.style.display = 'none';
                     }
                 }
             }
@@ -167,6 +164,7 @@
         }
 
         async function submitDefectReport() {
+            if (isSubmittingReport) return;
             if (!currentPinball) return;
             if (!ensureWritePermission()) return;
             if (!isTechMode && !currentPinball.isAktiv) {
@@ -187,6 +185,7 @@
                 return;
             }
 
+            isSubmittingReport = true;
             submitBtn.disabled = true;
             submitBtn.classList.add('btn-busy');
             submitBtn.innerText = fileInput.files[0] ? "⏳ Komprimiere Foto & sende..." : "⏳ Sende Defekt-Meldung...";
@@ -225,9 +224,11 @@
                     statusEl.style.display = 'none';
                     submitBtn.disabled = false;
                     submitBtn.innerText = "Defekt absenden";
+                    isSubmittingReport = false;
                     closeUserReportView();
                 }, 1300);
             } catch (err) {
+                isSubmittingReport = false;
                 submitBtn.classList.remove('btn-busy');
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler beim Senden: " + err.message;

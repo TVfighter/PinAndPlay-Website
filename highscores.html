@@ -82,14 +82,26 @@
             <label><strong>Neuer Highscore (Punktzahl)</strong></label>
             <input type="number" id="hs-score" placeholder="z.B. 125000000" min="1">
 
-            <label><strong id="hs-file-label">Beweisfoto vom Display hochladen</strong></label><br>
-            <input type="file" id="hs-file" accept="image/*" style="margin-bottom: 15px; border: none; padding: 0;">
+            <!-- Deutlich hervorgehobene Pflichtfeld-Box für das Beweisfoto -->
+            <div id="hs-photo-upload-box" class="photo-upload-box">
+                <label for="hs-file" style="display: block; margin-bottom: 6px; cursor: pointer;">
+                    <strong id="hs-file-label" style="font-size: 15px; color: var(--gold-light);">📸 Beweisfoto vom Flipper-Display hochladen</strong>
+                    <span class="badge-required">Pflichtfeld</span>
+                </label>
+                <p style="font-size: 13px; color: var(--text-main); margin: 0 0 10px 0; line-height: 1.45;">
+                    Für <strong>jeden Highscore</strong> muss ein Foto vom Display mit deinem sichtbaren Punktestand hochgeladen werden. Ohne Beweisfoto kann der Score nicht abgesendet werden!
+                </p>
+                <input type="file" id="hs-file" accept="image/*" onchange="onHighscorePhotoSelected()" style="margin-bottom: 6px; border: 1px solid var(--border-light); padding: 8px; background: var(--surface-input);">
+                <div id="hs-photo-selected-hint" style="font-size: 13px; font-weight: bold; color: #ff7b72;">
+                    ⚠️ Noch kein Beweisfoto ausgewählt (Pflicht zum Absenden)
+                </div>
+            </div>
 
             <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 15px;">
-                Hinweis: Dein Score wird nach dem Absenden von einem Techniker überprüft. Ist er höher als dein bisheriger Rekord an diesem Gerät, wird dein alter Score nach Verifizierung automatisch aktualisiert.
+                Hinweis: Dein Score wird nach dem Absenden anhand des Beweisfotos von einem Techniker überprüft (das Foto wird direkt bei der Verifizierung wieder gelöscht). Ist dein Score höher als dein bisheriger Rekord an diesem Gerät, wird dein alter Rekord automatisch aktualisiert.
             </p>
 
-            <button id="submit-hs-btn" class="btn-green" style="width: 100%; padding: 15px;" onclick="submitHighscore()">Senden</button>
+            <button id="submit-hs-btn" class="btn-green" style="width: 100%; padding: 15px;" onclick="submitHighscore()">Highscore mit Beweisfoto absenden</button>
             <p id="hs-submit-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
         </div>
     </div>
@@ -99,10 +111,29 @@
     <script>
         let originSource = 'highscores';
         let originPinballId = null;
+        let isSubmittingHighscore = false;
 
         function openDetailFromHighscores(targetUrl) {
             saveCurrentScrollPos();
             window.location.href = targetUrl;
+        }
+
+        function onHighscorePhotoSelected() {
+            const fileInput = document.getElementById('hs-file');
+            const box = document.getElementById('hs-photo-upload-box');
+            const hint = document.getElementById('hs-photo-selected-hint');
+            const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+
+            box.classList.remove('photo-missing-error');
+            if (file) {
+                box.classList.add('photo-selected-ok');
+                hint.style.color = '#7ee787';
+                hint.innerText = `✓ Beweisfoto ausgewählt: ${file.name}`;
+            } else {
+                box.classList.remove('photo-selected-ok');
+                hint.style.color = '#ff7b72';
+                hint.innerText = '⚠️ Noch kein Beweisfoto ausgewählt (Pflicht zum Absenden)';
+            }
         }
 
         function renderHighscoreOverview(selectedPinId = null) {
@@ -280,6 +311,7 @@
             selectEl.value = targetId;
 
             onHighscorePinballChange();
+            onHighscorePhotoSelected();
             document.getElementById('view-highscores').classList.add('hidden');
             document.getElementById('view-highscore-submit').classList.remove('hidden');
             window.scrollTo({ top: 0, behavior: 'instant' });
@@ -312,7 +344,6 @@
             const pin = pinballs.find(p => p.id === pinId);
             const initialsInput = document.getElementById('hs-initials');
             const hintBox = document.getElementById('hs-initials-rules-hint');
-            const fileLabel = document.getElementById('hs-file-label');
 
             if (pin) {
                 const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
@@ -320,22 +351,14 @@
 
                 if (pin.hsMaxLength === 0) {
                     initialsInput.placeholder = 'ABC';
-                    if (fileLabel) {
-                        fileLabel.innerText = isTechMode
-                            ? 'Beweisfoto vom Display hochladen (Für Techniker optional)'
-                            : 'Beweisfoto vom Display hochladen (Pflichtfeld bei diesem Gerät!)';
-                    }
-                    hintBox.innerHTML = `<strong>Historisches Gerät („${pin.name}“):</strong> Am Flipper selbst können keine Initialen eingegeben werden. Gib hier dein <strong>3-Zeichen-Kürzel</strong> (A–Z) ein und lade zwingend ein Beweisfoto vom Punktestand hoch.`;
+                    hintBox.innerHTML = `<strong>Historisches Gerät („${pin.name}“):</strong> Am Flipper selbst können keine Initialen eingegeben werden. Gib hier dein <strong>3-Zeichen-Kürzel</strong> (A–Z) ein und lade unten dein <strong>Beweisfoto vom Punktestand</strong> hoch.`;
                 } else {
                     initialsInput.placeholder = effectiveMaxLen <= 3 ? 'ABC' : `Max. ${effectiveMaxLen} Zeichen (oder 3er-Kürzel)`;
-                    if (fileLabel) {
-                        fileLabel.innerText = 'Beweisfoto vom Display hochladen';
-                    }
                     let allowedParts = ['Großbuchstaben (A–Z)'];
                     if (pin.hsAllowNumbers) allowedParts.push('Zahlen (0–9)');
                     if (pin.hsAllowSpecial) allowedParts.push('Leer-/Sonderzeichen');
 
-                    hintBox.innerHTML = `<strong>Eingaberegeln an „${pin.name}“:</strong> Max. <strong>${effectiveMaxLen} Zeichen</strong> — ${allowedParts.join(', ')}`;
+                    hintBox.innerHTML = `<strong>Eingaberegeln an „${pin.name}“:</strong> Max. <strong>${effectiveMaxLen} Zeichen</strong> — ${allowedParts.join(', ')} — <strong>Beweisfoto vom Display ist Pflicht!</strong>`;
                 }
             }
 
@@ -437,6 +460,8 @@
         }
 
         async function submitHighscore() {
+            // 1. Sofortige Sperre gegen doppeltes / mehrfaches Absenden
+            if (isSubmittingHighscore) return;
             if (!ensureWritePermission()) return;
 
             const pinId = Number(document.getElementById('hs-pinball-select').value);
@@ -457,7 +482,8 @@
 
             const scoreVal = parseInt(document.getElementById('hs-score').value, 10);
             const fileInput = document.getElementById('hs-file');
-            const file = fileInput.files[0];
+            const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+            const photoBox = document.getElementById('hs-photo-upload-box');
 
             const statusEl = document.getElementById('hs-submit-status');
             const submitBtn = document.getElementById('submit-hs-btn');
@@ -468,15 +494,33 @@
                 return;
             }
 
-            if (pin.hsMaxLength === 0 && !isTechMode && !file) {
-                alert(`Bei „${pin.name}“ können am Gerät selbst keine Initialen eingetragen werden. Bitte hänge zwingend ein Beweisfoto vom Display an!`);
+            // 2. Beweisfoto ist bei ALLEN Highscores zwingend Pflicht
+            if (!file) {
+                photoBox.classList.remove('photo-selected-ok');
+                photoBox.classList.add('photo-missing-error');
+                photoBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                statusEl.style.display = 'block';
+                statusEl.style.color = '#ff7b72';
+                statusEl.innerText = "⚠️ Absenden blockiert: Bitte wähle zuerst ein Beweisfoto vom Flipper-Display aus!";
+                showActionToast("⚠️ Beweisfoto fehlt! Für jeden Highscore ist ein Foto vom Display Pflicht.", "error", 4200);
+                alert("Beweisfoto fehlt!\n\nFür jeden Highscore muss zwingend ein Beweisfoto vom Flipper-Display hochgeladen werden. Bitte wähle zuerst ein Foto aus.");
                 return;
             }
 
+            // 3. Verhindern, dass exakt derselbe Score doppelt eingereicht wird
             if (pin.hsMaxLength === 0) {
                 const duplicateExactScore = highscoresDB.some(h => h.pinballId === pinId && h.score === scoreVal);
                 if (duplicateExactScore) {
+                    showActionToast("Exakt dieser Punktestand wurde an diesem Gerät bereits eingereicht!", "error");
                     alert(`Sicherheitssperre für Geräte ohne Namensanzeige: Exakt dieser Punktestand (${formatScore(scoreVal)}) wurde an „${pin.name}“ bereits eingereicht!`);
+                    return;
+                }
+            } else {
+                const duplicatePlayerScore = highscoresDB.some(
+                    h => h.pinballId === pinId && isSamePlayerIdentity(h.initials, initials) && h.score === scoreVal
+                );
+                if (duplicatePlayerScore) {
+                    showActionToast("Dieser Punktestand wurde für dein Kürzel bereits eingereicht!", "error");
                     return;
                 }
             }
@@ -492,83 +536,88 @@
                 }
             }
 
-            if (matchedProfile && matchedProfile.hasPin === true && !isTechMode) {
-                const savedPin = localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`);
-                const enteredPin = document.getElementById('hs-player-pin').value.trim();
-                const activePin = savedPin || enteredPin;
-
-                if (!activePin) {
-                    document.getElementById('hs-pin-protect-box').classList.remove('hidden');
-                    alert(`Für das Kürzel „${matchedProfile.displayName}“ ist eine PIN hinterlegt. Bitte gib deine PIN ein!`);
-                    return;
-                }
-
-                const { data: pinValid, error: pinErr } = await db.rpc('verify_player_pin', {
-                    p_player_id: matchedProfile.id,
-                    p_pin: activePin
-                });
-
-                if (pinErr || !pinValid) {
-                    localStorage.removeItem(`pinplay_player_pin_${matchedProfile.id}`);
-                    document.getElementById('hs-pin-protect-box').classList.remove('hidden');
-                    document.getElementById('hs-player-pin').value = '';
-                    alert("Falsche Spieler-PIN! Bitte gib die korrekte PIN ein.");
-                    return;
-                }
-
-                localStorage.setItem(`pinplay_player_pin_${matchedProfile.id}`, activePin);
-            }
-
+            // Ab hier: Request-Sperre sofort aktivieren (noch vor jedem await!)
+            isSubmittingHighscore = true;
             submitBtn.disabled = true;
             submitBtn.classList.add('btn-busy');
-            submitBtn.innerText = file ? "⏳ Komprimiere Foto & sende..." : "⏳ Sende Highscore...";
-            statusEl.style.display = 'block';
-            statusEl.style.color = 'var(--gold-light)';
-            statusEl.innerText = "Sende Highscore...";
 
             try {
-                const uploadedFilePath = await uploadIncomingPhoto('highscore', file);
-                const autoVerify = isTechMode;
+                if (matchedProfile && matchedProfile.hasPin === true && !isTechMode) {
+                    const savedPin = localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`);
+                    const enteredPin = document.getElementById('hs-player-pin').value.trim();
+                    const activePin = savedPin || enteredPin;
 
-                const { data: insertedRows, error } = await db.from('highscore').insert([{
+                    if (!activePin) {
+                        document.getElementById('hs-pin-protect-box').classList.remove('hidden');
+                        alert(`Für das Kürzel „${matchedProfile.displayName}“ ist eine PIN hinterlegt. Bitte gib deine PIN ein!`);
+                        isSubmittingHighscore = false;
+                        submitBtn.disabled = false;
+                        submitBtn.classList.remove('btn-busy');
+                        return;
+                    }
+
+                    const { data: pinValid, error: pinErr } = await db.rpc('verify_player_pin', {
+                        p_player_id: matchedProfile.id,
+                        p_pin: activePin
+                    });
+
+                    if (pinErr || !pinValid) {
+                        localStorage.removeItem(`pinplay_player_pin_${matchedProfile.id}`);
+                        document.getElementById('hs-pin-protect-box').classList.remove('hidden');
+                        document.getElementById('hs-player-pin').value = '';
+                        alert("Falsche Spieler-PIN! Bitte gib die korrekte PIN ein.");
+                        isSubmittingHighscore = false;
+                        submitBtn.disabled = false;
+                        submitBtn.classList.remove('btn-busy');
+                        return;
+                    }
+
+                    localStorage.setItem(`pinplay_player_pin_${matchedProfile.id}`, activePin);
+                }
+
+                submitBtn.innerText = "⏳ Komprimiere Beweisfoto & sende...";
+                statusEl.style.display = 'block';
+                statusEl.style.color = 'var(--gold-light)';
+                statusEl.innerText = "Beweisfoto wird komprimiert und Highscore übertragen...";
+
+                const uploadedFilePath = await uploadIncomingPhoto('highscore', file);
+
+                const { error } = await db.from('highscore').insert([{
                     flipper_id: pinId,
                     initials: initials,
                     score: scoreVal,
-                    verifiziert: autoVerify,
+                    verifiziert: false,
                     beweisfoto: uploadedFilePath
-                }]).select();
+                }]);
 
                 if (error) throw error;
 
-                if (autoVerify && insertedRows && insertedRows.length > 0) {
-                    await removeOldLowerPlayerScores(pinId, initials, insertedRows[0].id, scoreVal);
-                }
-
                 submitBtn.classList.remove('btn-busy');
-                submitBtn.innerText = "✓ Highscore gespeichert!";
+                submitBtn.innerText = "✓ Highscore eingereicht!";
                 statusEl.style.color = '#3fb950';
-                statusEl.innerText = autoVerify
-                    ? "✓ Highscore direkt verifiziert eingetragen!"
-                    : "✓ Highscore eingereicht! Er wird nach Verifizierung freigeschaltet.";
+                statusEl.innerText = "✓ Highscore mit Beweisfoto eingereicht! Er wird nach Prüfung freigeschaltet.";
                 showActionToast(statusEl.innerText, "success");
 
                 document.getElementById('hs-score').value = '';
                 fileInput.value = '';
+                onHighscorePhotoSelected();
 
                 await loadAllDatabaseData();
                 setTimeout(() => {
                     statusEl.style.display = 'none';
                     submitBtn.disabled = false;
-                    submitBtn.innerText = "Senden";
+                    submitBtn.innerText = "Highscore mit Beweisfoto absenden";
+                    isSubmittingHighscore = false;
                     goBackFromHighscoreSubmit();
                 }, 1300);
             } catch (err) {
+                isSubmittingHighscore = false;
                 submitBtn.classList.remove('btn-busy');
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler beim Senden: " + err.message;
                 showActionToast("Fehler beim Senden: " + err.message, "error");
                 submitBtn.disabled = false;
-                submitBtn.innerText = "Senden";
+                submitBtn.innerText = "Highscore mit Beweisfoto absenden";
             }
         }
 
