@@ -13,7 +13,7 @@
     <div id="view-highscores" class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="goHome()" title="Zurück zur Übersicht">←</button>
+                <button class="btn-back" onclick="navigateBackTo(isTechMode ? 'techniker' : './')" title="Zurück zur Übersicht">←</button>
                 <h2 style="margin: 0;">Pin&amp;Play Highscores</h2>
             </div>
             <div class="detail-header-actions">
@@ -100,6 +100,11 @@
         let originSource = 'highscores';
         let originPinballId = null;
 
+        function openDetailFromHighscores(targetUrl) {
+            saveCurrentScrollPos();
+            window.location.href = targetUrl;
+        }
+
         function renderHighscoreOverview(selectedPinId = null) {
             const allTbody = document.getElementById('hs-all-machines-tbody');
             const selectEl = document.getElementById('leaderboard-pinball-select');
@@ -136,11 +141,11 @@
                 const scoreText = topEntry ? `<strong>${formatScore(topEntry.score)}</strong>` : '<span style="color:var(--text-muted);">Noch kein Rekord</span>';
 
                 const actionAddHtml = (isTechMode || p.isAktiv)
-                    ? `<button class="btn-add-score" onclick="openHighscoreSubmit(${p.id})" title="Highscore für ${p.name} eintragen">+</button>`
+                    ? `<button class="btn-add-score" onclick="openHighscoreSubmit(${p.id}, 'highscores')" title="Highscore für ${p.name} eintragen">+</button>`
                     : `<span class="badge-inactive-icon" title="${p.name} ist derzeit außer Betrieb (Keine Highscore-Eintragung möglich)">!</span>`;
 
                 const techUnverifBadgeHtml = hasUnverifiedForTech
-                    ? `<span class="badge-unverified-hs" onclick="window.location.href='tech-detail?id=${p.id}&tab=highscore&from=highscores'" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} im Techniker-Menü zu prüfen">${unverifiedHsCount} unverifiziert</span>`
+                    ? `<span class="badge-unverified-hs" onclick="openDetailFromHighscores('tech-detail?id=${p.id}&tab=highscore&from=highscores')" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} im Techniker-Menü zu prüfen">${unverifiedHsCount} unverifiziert</span>`
                     : '';
 
                 const detailTargetUrl = isTechMode
@@ -151,7 +156,7 @@
 
                 allTbody.innerHTML += `
                     <tr class="${rowClass}">
-                        <td><span class="clickable-name" onclick="window.location.href='${detailTargetUrl}'">${p.name}</span>${techUnverifBadgeHtml}</td>
+                        <td><span class="clickable-name" onclick="openDetailFromHighscores('${detailTargetUrl}')">${p.name}</span>${techUnverifBadgeHtml}</td>
                         <td>${holderText}</td>
                         <td>${scoreText}</td>
                         <td>
@@ -225,14 +230,27 @@
             const selectedId = Number(document.getElementById('leaderboard-pinball-select').value);
             const selectedPin = pinballs.find(p => p.id === selectedId);
             if (!isTechMode && selectedPin && !selectedPin.isAktiv) {
-                openHighscoreSubmit(null);
+                openHighscoreSubmit(null, 'highscores');
             } else {
-                openHighscoreSubmit(selectedId);
+                openHighscoreSubmit(selectedId, 'highscores');
             }
         }
 
-        function openHighscoreSubmit(preselectedPinballId = null) {
-            if (!ensureWritePermission()) return;
+        function openHighscoreSubmit(preselectedPinballId = null, forcedOrigin = null) {
+            if (!ensureWritePermission()) {
+                if (originSource === 'detail' && originPinballId) {
+                    navigateBackTo(`detail?id=${originPinballId}`);
+                } else if (originSource === 'tech-detail' && originPinballId) {
+                    navigateBackTo(`tech-detail?id=${originPinballId}&tab=highscore`);
+                }
+                return;
+            }
+
+            if (forcedOrigin) {
+                originSource = forcedOrigin;
+                sessionStorage.setItem(NAV_HS_SUBMIT_ORIGIN_KEY, forcedOrigin);
+                saveCurrentScrollPos();
+            }
 
             const requestedPin = preselectedPinballId ? pinballs.find(p => p.id === Number(preselectedPinballId)) : null;
 
@@ -264,19 +282,22 @@
             onHighscorePinballChange();
             document.getElementById('view-highscores').classList.add('hidden');
             document.getElementById('view-highscore-submit').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'instant' });
         }
 
         function goBackFromHighscoreSubmit() {
-            const selectedId = Number(document.getElementById('hs-pinball-select').value) || originPinballId;
-            if (originSource === 'detail' && selectedId) {
-                window.location.href = `detail?id=${selectedId}`;
-            } else if (originSource === 'tech-detail' && selectedId) {
-                window.location.href = `tech-detail?id=${selectedId}&tab=highscore`;
+            const targetPinId = originPinballId || Number(document.getElementById('hs-pinball-select').value);
+            if (originSource === 'detail' && targetPinId) {
+                navigateBackTo(`detail?id=${targetPinId}`);
+            } else if (originSource === 'tech-detail' && targetPinId) {
+                navigateBackTo(`tech-detail?id=${targetPinId}&tab=highscore`);
             } else {
                 document.getElementById('view-highscore-submit').classList.add('hidden');
                 document.getElementById('view-highscores').classList.remove('hidden');
                 window.history.replaceState({}, '', 'highscores');
-                renderHighscoreOverview(selectedId);
+                renderHighscoreOverview(targetPinId);
+                const savedY = parseInt(sessionStorage.getItem(getNormalizedPageKey()) || '0', 10);
+                window.scrollTo({ top: savedY, behavior: 'instant' });
             }
         }
 
@@ -294,7 +315,6 @@
             const fileLabel = document.getElementById('hs-file-label');
 
             if (pin) {
-                // Wenn hs_max_length = 0 ist, gilt auf der Webseite max. Länge 3
                 const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
                 initialsInput.maxLength = effectiveMaxLen;
 
@@ -322,7 +342,6 @@
             handleInitialsInput();
         }
 
-        // Blockiert Zahlen und Sonderzeichen SOFORT beim Tippen, wenn der Flipper sie nicht erlaubt
         function sanitizeInitialsForPinball(rawVal, pin) {
             if (!pin) return String(rawVal || '').toUpperCase();
             const val = String(rawVal || '').toUpperCase();
@@ -374,7 +393,6 @@
             const matchedProfile = resolvePlayerProfile(rawTyped);
             const storedPinForProfile = matchedProfile ? localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`) : null;
 
-            // Nur nach einer PIN fragen, wenn für dieses Kürzel tatsächlich eine PIN gespeichert ist (hasPin === true)
             if (matchedProfile && matchedProfile.hasPin === true && !isTechMode) {
                 if (storedPinForProfile) {
                     pinInput.value = storedPinForProfile;
@@ -445,11 +463,11 @@
             const submitBtn = document.getElementById('submit-hs-btn');
 
             if (!pinId || !initials || !scoreVal || isNaN(scoreVal) || scoreVal <= 0) {
+                showActionToast("Bitte gib gültige Initialen und eine Punktzahl ein!", "error");
                 alert("Bitte wähle einen Flipper und gib gültige Initialen sowie eine Punktzahl ein!");
                 return;
             }
 
-            // Pflicht-Beweisfoto für reguläre Nutzer bei Geräten mit hs_max_length = 0
             if (pin.hsMaxLength === 0 && !isTechMode && !file) {
                 alert(`Bei „${pin.name}“ können am Gerät selbst keine Initialen eingetragen werden. Bitte hänge zwingend ein Beweisfoto vom Display an!`);
                 return;
@@ -474,7 +492,6 @@
                 }
             }
 
-            // PIN-Prüfung NUR ausführen, wenn für dieses Kürzel tatsächlich eine PIN gespeichert ist (hasPin === true)
             if (matchedProfile && matchedProfile.hasPin === true && !isTechMode) {
                 const savedPin = localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`);
                 const enteredPin = document.getElementById('hs-player-pin').value.trim();
@@ -503,6 +520,8 @@
             }
 
             submitBtn.disabled = true;
+            submitBtn.classList.add('btn-busy');
+            submitBtn.innerText = file ? "⏳ Komprimiere Foto & sende..." : "⏳ Sende Highscore...";
             statusEl.style.display = 'block';
             statusEl.style.color = 'var(--gold-light)';
             statusEl.innerText = "Sende Highscore...";
@@ -525,10 +544,13 @@
                     await removeOldLowerPlayerScores(pinId, initials, insertedRows[0].id, scoreVal);
                 }
 
+                submitBtn.classList.remove('btn-busy');
+                submitBtn.innerText = "✓ Highscore gespeichert!";
                 statusEl.style.color = '#3fb950';
                 statusEl.innerText = autoVerify
-                    ? "Highscore direkt verifiziert eingetragen!"
-                    : "Highscore eingereicht! Er wird nach Verifizierung freigeschaltet.";
+                    ? "✓ Highscore direkt verifiziert eingetragen!"
+                    : "✓ Highscore eingereicht! Er wird nach Verifizierung freigeschaltet.";
+                showActionToast(statusEl.innerText, "success");
 
                 document.getElementById('hs-score').value = '';
                 fileInput.value = '';
@@ -537,19 +559,29 @@
                 setTimeout(() => {
                     statusEl.style.display = 'none';
                     submitBtn.disabled = false;
+                    submitBtn.innerText = "Senden";
                     goBackFromHighscoreSubmit();
-                }, 1200);
+                }, 1300);
             } catch (err) {
+                submitBtn.classList.remove('btn-busy');
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler beim Senden: " + err.message;
+                showActionToast("Fehler beim Senden: " + err.message, "error");
                 submitBtn.disabled = false;
+                submitBtn.innerText = "Senden";
             }
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
             const params = new URLSearchParams(window.location.search);
+            const isSubmitMode = params.get('submit') === '1';
             originPinballId = params.get('id') ? Number(params.get('id')) : null;
-            originSource = navOriginFrom || 'highscores';
+            originSource = navOriginHsSubmit || 'highscores';
+
+            if (isSubmitMode) {
+                document.getElementById('view-highscores').classList.add('hidden');
+                document.getElementById('view-highscore-submit').classList.remove('hidden');
+            }
 
             await initSharedApp(() => {
                 if (document.getElementById('view-highscore-submit').classList.contains('hidden')) {
@@ -561,7 +593,7 @@
 
             renderHighscoreOverview(originPinballId);
 
-            if (params.get('submit') === '1') {
+            if (isSubmitMode) {
                 openHighscoreSubmit(originPinballId);
             }
         });

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pinplay-static-v10';
+const CACHE_NAME = 'pinplay-static-v14';
 const STATIC_ASSETS = [
     'index.html',
     'detail.html',

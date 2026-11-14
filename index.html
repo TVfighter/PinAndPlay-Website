@@ -46,6 +46,11 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
     <script>
+        function openFlipperCard(targetUrl) {
+            saveCurrentScrollPos();
+            window.location.href = targetUrl;
+        }
+
         function renderUserGrid() {
             const grid = document.getElementById('user-grid');
             const fbBtn = document.getElementById('user-overview-feedback-btn');
@@ -64,10 +69,10 @@
                 const aktivLabel = p.isAktiv ? '' : '<br><span style="color: var(--gold-mid); font-size: 13px; font-weight: normal;">(Derzeit nicht in Aufstellung)</span>';
                 const cardStyle = p.isAktiv ? '' : 'opacity: 0.45; filter: grayscale(65%);';
                 const imgHtml = p.imgUrl ? `<img src="${p.imgUrl}" alt="${p.name}" loading="lazy">` : '';
-                const targetUrl = isTechMode ? `tech-detail?id=${p.id}` : `detail?id=${p.id}`;
+                const targetUrl = isTechMode ? `tech-detail?id=${p.id}&from=index` : `detail?id=${p.id}&from=index`;
 
                 grid.innerHTML += `
-                    <div class="flipper-card" onclick="window.location.href='${targetUrl}'" style="${cardStyle}">
+                    <div class="flipper-card" onclick="openFlipperCard('${targetUrl}')" style="${cardStyle}">
                         <div class="placeholder-img">${imgHtml}</div>
                         <h3 style="margin: 10px 0 0 0;">${p.name}${aktivLabel}</h3>
                     </div>
@@ -77,16 +82,22 @@
 
         function showFeedbackOnIndex() {
             if (!ensureWritePermission()) return;
+            saveCurrentScrollPos();
             document.getElementById('view-user-overview').classList.add('hidden');
             document.getElementById('view-feedback').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'instant' });
         }
 
         function showOverviewOnIndex() {
             document.getElementById('view-feedback').classList.add('hidden');
             document.getElementById('view-user-overview').classList.remove('hidden');
+            const savedY = parseInt(sessionStorage.getItem(getNormalizedPageKey()) || '0', 10);
+            window.scrollTo({ top: savedY, behavior: 'instant' });
         }
 
         async function submitGeneralFeedback() {
+            if (!ensureWritePermission()) return;
+
             const desc = document.getElementById('feedback-desc').value.trim();
             const email = document.getElementById('feedback-email').value.trim();
             const fileInput = document.getElementById('feedback-file');
@@ -95,14 +106,17 @@
             const submitBtn = document.getElementById('submit-feedback-btn');
 
             if (!desc) {
+                showActionToast("Bitte gib eine Nachricht ein!", "error");
                 alert("Bitte gib eine Nachricht ein!");
                 return;
             }
 
             submitBtn.disabled = true;
+            submitBtn.classList.add('btn-busy');
+            submitBtn.innerText = fileInput.files[0] ? "⏳ Komprimiere Foto & sende..." : "⏳ Sende Feedback...";
             statusEl.style.display = 'block';
             statusEl.style.color = 'var(--gold-light)';
-            statusEl.innerText = "Sende Feedback...";
+            statusEl.innerText = "Dein Feedback wird übertragen...";
 
             try {
                 const uploadedFilePath = await uploadIncomingPhoto('feedback', fileInput.files[0]);
@@ -115,8 +129,14 @@
 
                 if (error) throw error;
 
+                if (isLoggedIn) await loadAllDatabaseData();
+
+                submitBtn.classList.remove('btn-busy');
+                submitBtn.innerText = "✓ Feedback erfolgreich gesendet!";
                 statusEl.style.color = '#3fb950';
-                statusEl.innerText = "Vielen Dank für dein Feedback!";
+                statusEl.innerText = "✓ Vielen Dank! Dein Feedback wurde erfolgreich gespeichert.";
+                showActionToast("✓ Vielen Dank! Dein Feedback wurde erfolgreich gesendet.", "success");
+
                 document.getElementById('feedback-desc').value = '';
                 document.getElementById('feedback-email').value = '';
                 fileInput.value = '';
@@ -124,12 +144,16 @@
                 setTimeout(() => {
                     statusEl.style.display = 'none';
                     submitBtn.disabled = false;
+                    submitBtn.innerText = "Feedback absenden";
                     showOverviewOnIndex();
-                }, 1200);
+                }, 1500);
             } catch (err) {
+                submitBtn.classList.remove('btn-busy');
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Feedback absenden";
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler beim Senden: " + err.message;
-                submitBtn.disabled = false;
+                showActionToast("Fehler beim Senden: " + err.message, "error");
             }
         }
 

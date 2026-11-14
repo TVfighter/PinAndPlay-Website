@@ -170,6 +170,32 @@
         </div>
     </div>
 
+    <!-- TECHNIKER POPUP 3 (MODAL): Meldung an eine andere Meldung anhängen (Merge) -->
+    <div id="tech-merge-modal" class="modal-overlay hidden" onclick="handleModalBackdropClick(event, 'tech-merge-modal')">
+        <div class="modal-box">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 style="margin: 0;">Meldung an andere anhängen</h3>
+                <button class="btn-switch" onclick="closeMergeReportModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 12px;">
+                    Der Inhalt der ausgewählten Meldung wird gelöscht. Eine vorhandene <strong>E-Mail-Adresse</strong> wird in die Ziel-Meldung übernommen und die <strong>Anzahl der Meldungen</strong> wird exakt addiert.
+                </p>
+
+                <div id="merge-source-preview" style="background: var(--surface-elevated); border: 1px solid var(--border-subtle); padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;"></div>
+
+                <label><strong>Ziel-Meldung auswählen (an die angehängt werden soll)</strong></label>
+                <select id="merge-target-select" onchange="updateMergeMathPreview()"></select>
+
+                <div id="merge-math-preview" style="margin-bottom: 15px; padding: 10px 12px; border-radius: 6px; background: rgba(56, 139, 253, 0.14); border: 1px solid var(--primary-blue); color: #79c0ff; font-size: 14px; font-weight: bold;"></div>
+
+                <button id="merge-confirm-btn" class="btn-green" style="width: 100%; padding: 14px;" onclick="confirmMergeReports()">
+                    Jetzt zusammenführen
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
     <script>
@@ -177,6 +203,7 @@
         let currentReportStatusView = 'offen';
         let editingReportId = null;
         let resolvingReportId = null;
+        let mergingSourceReportId = null;
 
         let activeReportFilters = { u: true, 1: true, 2: true, 3: true };
         let activeHsFilters = { unverif: true, verif: true };
@@ -185,12 +212,16 @@
             offen: [
                 { value: 'prio-desc', label: 'Prio: Hoch → Niedrig' },
                 { value: 'prio-asc', label: 'Prio: Niedrig → Hoch' },
+                { value: 'merge-desc', label: 'Anzahl Meldungen: Viele → Wenige' },
+                { value: 'merge-asc', label: 'Anzahl Meldungen: Wenige → Viele' },
                 { value: 'date-desc', label: 'Gemeldet: Neueste zuerst' },
                 { value: 'date-asc', label: 'Gemeldet: Älteste zuerst' }
             ],
             behoben: [
                 { value: 'resolved-desc', label: 'Behoben: Neueste zuerst' },
                 { value: 'resolved-asc', label: 'Behoben: Älteste zuerst' },
+                { value: 'merge-desc', label: 'Anzahl Meldungen: Viele → Wenige' },
+                { value: 'merge-asc', label: 'Anzahl Meldungen: Wenige → Viele' },
                 { value: 'prio-desc', label: 'Prio: Hoch → Niedrig' },
                 { value: 'prio-asc', label: 'Prio: Niedrig → Hoch' }
             ],
@@ -204,12 +235,13 @@
         };
 
         function goBackFromTechDetail() {
-            const params = new URLSearchParams(window.location.search);
-            if (navOriginFrom === 'highscores') {
+            if (navOriginDetail === 'highscores') {
                 const idParam = currentPinball ? `?id=${currentPinball.id}` : '';
-                window.location.href = `highscores${idParam}`;
+                navigateBackTo(`highscores${idParam}`);
+            } else if (navOriginDetail === 'index') {
+                navigateBackTo('./');
             } else {
-                window.location.href = 'techniker';
+                navigateBackTo('techniker');
             }
         }
 
@@ -227,6 +259,7 @@
 
         function goToTechHighscoreSubmit() {
             if (!currentPinball) return;
+            saveCurrentScrollPos();
             window.location.href = `highscores?submit=1&id=${currentPinball.id}&from=tech-detail`;
         }
 
@@ -243,10 +276,16 @@
             if (!currentPinball) return;
             const newAktiv = !currentPinball.isAktiv;
             const statusBtn = document.getElementById('tech-detail-status-btn');
-            statusBtn.innerText = "Speichere...";
+            statusBtn.disabled = true;
+            statusBtn.classList.add('btn-busy');
+            statusBtn.innerText = "⏳ Speichere...";
 
             const { error } = await db.from('flipper').update({ aktiv: newAktiv }).eq('id', currentPinball.id);
+            statusBtn.disabled = false;
+            statusBtn.classList.remove('btn-busy');
+
             if (error) {
+                showActionToast("Fehler beim Ändern des Status: " + error.message, "error");
                 alert("Fehler beim Ändern des Status: " + error.message);
                 statusBtn.innerText = "Status: " + currentPinball.status;
                 return;
@@ -257,10 +296,12 @@
             statusBtn.innerText = "Status: " + currentPinball.status;
             statusBtn.className = "btn-status-tech " + getStatusColorClass(currentPinball.status);
             saveStateToCache();
+            showActionToast(`✓ Status geändert auf: ${currentPinball.status}`, "success");
         }
 
         function populateSortDropdownForTab(tabKey) {
             const sortSelect = document.getElementById('sort-reports');
+            const prevValue = sortSelect.value;
             const options = TAB_SORT_OPTIONS[tabKey] || TAB_SORT_OPTIONS.offen;
             sortSelect.innerHTML = '';
             options.forEach(opt => {
@@ -269,7 +310,11 @@
                 el.textContent = opt.label;
                 sortSelect.appendChild(el);
             });
-            sortSelect.value = options[0].value;
+            if (options.some(o => o.value === prevValue)) {
+                sortSelect.value = prevValue;
+            } else {
+                sortSelect.value = options[0].value;
+            }
         }
 
         function handleContextAddClick() {
@@ -461,6 +506,7 @@
             }
 
             await removeOldLowerPlayerScores(target.pinballId, target.initials, hsId, target.score);
+            showActionToast(`✓ Highscore (${formatScore(target.score)}) verifiziert!`, "success");
             await refreshCurrentMachineData();
         }
 
@@ -472,6 +518,7 @@
                 alert("Fehler beim Löschen: " + error.message);
                 return;
             }
+            showActionToast("Highscore gelöscht.", "info");
             await refreshCurrentMachineData();
         }
 
@@ -481,16 +528,16 @@
 
             updateReportStatusTabsUI();
 
-            let filtered = reportsDB
-                .filter(r => r.pinballId === currentPinball.id && r.status === currentReportStatusView)
-                .filter(r => {
-                    const isUnverif = !r.verifiziert || r.prio === 0;
-                    if (isUnverif) return activeReportFilters.u;
-                    if (r.prio === 1) return activeReportFilters[1];
-                    if (r.prio === 2) return activeReportFilters[2];
-                    if (r.prio === 3) return activeReportFilters[3];
-                    return true;
-                });
+            const allReportsOnPinInTab = reportsDB.filter(r => r.pinballId === currentPinball.id && r.status === currentReportStatusView);
+
+            let filtered = allReportsOnPinInTab.filter(r => {
+                const isUnverif = !r.verifiziert || r.prio === 0;
+                if (isUnverif) return activeReportFilters.u;
+                if (r.prio === 1) return activeReportFilters[1];
+                if (r.prio === 2) return activeReportFilters[2];
+                if (r.prio === 3) return activeReportFilters[3];
+                return true;
+            });
 
             const sortVal = document.getElementById('sort-reports').value;
             filtered.sort((a, b) => {
@@ -498,7 +545,17 @@
                 const dateB = new Date(b.date).getTime() || 0;
                 const resA = new Date(a.behobenAm || a.date).getTime() || 0;
                 const resB = new Date(b.behobenAm || b.date).getTime() || 0;
+                const mergeA = Number(a.mergeCount || 1);
+                const mergeB = Number(b.mergeCount || 1);
 
+                if (sortVal === 'merge-desc') {
+                    if (mergeB !== mergeA) return mergeB - mergeA;
+                    return dateB - dateA;
+                }
+                if (sortVal === 'merge-asc') {
+                    if (mergeA !== mergeB) return mergeA - mergeB;
+                    return dateB - dateA;
+                }
                 if (sortVal === 'date-desc') return dateB - dateA;
                 if (sortVal === 'date-asc') return dateA - dateB;
                 if (sortVal === 'resolved-desc') return resB - resA;
@@ -550,6 +607,11 @@
                     ? `<span class="badge-verified">Verifiziert</span>`
                     : `<span class="badge-unverified">UNVERIFIZIERT (Neue Nutzermeldung)</span>`;
 
+                // Zeigt die Anzahl erst an, wenn mindestens eine weitere Meldung dazugemergt wurde (mergeCount >= 2)
+                const mergedBadgeHtml = r.mergeCount >= 2
+                    ? `<span class="badge-merged" title="Besteht aus ${r.mergeCount} zusammengeführten Meldungen">🔗 ${r.mergeCount} Meldungen</span>`
+                    : '';
+
                 const statusBadgeHtml = r.status === 'behoben'
                     ? `<span class="badge-resolved">Behoben am ${resolvedStr}</span>`
                     : '';
@@ -585,6 +647,10 @@
                     ? `<button class="btn-switch" onclick="openTechReportModal(${r.id})">Bearbeiten</button>`
                     : `<button class="btn-green" onclick="openTechReportModal(${r.id})">Verifizieren &amp; Prio setzen</button>`;
 
+                const mergeBtnHtml = allReportsOnPinInTab.length >= 2
+                    ? `<button class="btn-switch" onclick="openMergeReportModal(${r.id})" title="Diese Meldung an eine andere anhängen">An andere anhängen</button>`
+                    : '';
+
                 const resolveBtnHtml = r.status === 'offen'
                     ? `<button class="btn-green" onclick="openResolveModal(${r.id})">Als behoben markieren</button>`
                     : '';
@@ -599,6 +665,7 @@
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                                 ${prioBadgeHtml}
                                 ${verifBadgeHtml}
+                                ${mergedBadgeHtml}
                                 ${statusBadgeHtml}
                             </div>
                             <span style="color: var(--text-muted); font-size: 13px;">
@@ -618,6 +685,7 @@
                             <div style="display:flex; gap:8px; flex-wrap:wrap;">${photoBtns.join('')}</div>
                             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                 ${editBtnHtml}
+                                ${mergeBtnHtml}
                                 ${resolveBtnHtml}
                                 <button class="btn-report" onclick="deleteReport(${r.id}, '${safeFoto}', '${safeSolFoto}')">Löschen</button>
                             </div>
@@ -625,6 +693,130 @@
                     </div>
                 `;
             });
+        }
+
+        // --- MELDUNGEN ZUSAMMENFÜHREN (MERGE MIT EXAKTER MATHEMATIK: 2 + 2 = 4) ---
+
+        function openMergeReportModal(sourceReportId) {
+            if (!currentPinball) return;
+            const sourceReport = reportsDB.find(r => r.id === sourceReportId);
+            if (!sourceReport) return;
+
+            const candidateTargets = reportsDB.filter(
+                r => r.pinballId === currentPinball.id &&
+                     r.status === sourceReport.status &&
+                     r.id !== sourceReportId
+            );
+
+            if (candidateTargets.length === 0) {
+                showActionToast("Keine andere Meldung zum Anhängen vorhanden.", "info");
+                return;
+            }
+
+            mergingSourceReportId = sourceReportId;
+
+            const previewEl = document.getElementById('merge-source-preview');
+            const shortText = sourceReport.text.length > 90 ? sourceReport.text.substring(0, 90) + '...' : sourceReport.text;
+            const emailHint = sourceReport.email ? `E-Mail wird übernommen: <strong>${sourceReport.email}</strong>` : 'Keine E-Mail hinterlegt';
+            previewEl.innerHTML = `
+                <strong>Anzuhängende Meldung (${sourceReport.mergeCount}x):</strong> „${shortText.replace(/</g, "&lt;")}“<br>
+                <span style="color:var(--gold-light);">${emailHint}</span>
+            `;
+
+            const selectEl = document.getElementById('merge-target-select');
+            selectEl.innerHTML = '';
+            candidateTargets.forEach(t => {
+                const prioLabel = t.prio > 0 ? `Prio ${t.prio}` : 'Unverifiziert';
+                const snippet = t.text.length > 65 ? t.text.substring(0, 65) + '...' : t.text;
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.textContent = `[${prioLabel} | Bisher ${t.mergeCount}x] ${snippet}`;
+                selectEl.appendChild(opt);
+            });
+
+            updateMergeMathPreview();
+            document.getElementById('tech-merge-modal').classList.remove('hidden');
+        }
+
+        function updateMergeMathPreview() {
+            const sourceReport = reportsDB.find(r => r.id === mergingSourceReportId);
+            const targetId = Number(document.getElementById('merge-target-select').value);
+            const targetReport = reportsDB.find(r => r.id === targetId);
+            const mathBox = document.getElementById('merge-math-preview');
+
+            if (!sourceReport || !targetReport) {
+                mathBox.innerText = '';
+                return;
+            }
+
+            const a = Number(targetReport.mergeCount || 1);
+            const b = Number(sourceReport.mergeCount || 1);
+            const sum = a + b;
+            mathBox.innerText = `Neuer Zähler der Ziel-Meldung: ${a} + ${b} = ${sum} zusammengefasste Meldungen`;
+        }
+
+        function closeMergeReportModal() {
+            document.getElementById('tech-merge-modal').classList.add('hidden');
+            mergingSourceReportId = null;
+        }
+
+        async function confirmMergeReports() {
+            const sourceReport = reportsDB.find(r => r.id === mergingSourceReportId);
+            const targetId = Number(document.getElementById('merge-target-select').value);
+            const targetReport = reportsDB.find(r => r.id === targetId);
+
+            if (!sourceReport || !targetReport) return;
+
+            const btn = document.getElementById('merge-confirm-btn');
+            btn.disabled = true;
+            btn.classList.add('btn-busy');
+            btn.innerText = "⏳ Führe Meldungen zusammen...";
+
+            try {
+                // 1. Exakte Addition der Meldungs-Zähler (z.B. 2 + 2 = 4)
+                const newMergeCount = Number(targetReport.mergeCount || 1) + Number(sourceReport.mergeCount || 1);
+
+                // 2. E-Mail-Adressen ohne Duplikate zusammenführen
+                const emailSet = new Set();
+                if (targetReport.email) {
+                    targetReport.email.split(',').map(s => s.trim()).filter(Boolean).forEach(e => emailSet.add(e));
+                }
+                if (sourceReport.email) {
+                    sourceReport.email.split(',').map(s => s.trim()).filter(Boolean).forEach(e => emailSet.add(e));
+                }
+                const combinedEmails = Array.from(emailSet).join(', ');
+
+                // 3. Ziel-Meldung in der Datenbank aktualisieren
+                const { error: updateErr } = await db.from('reports').update({
+                    merge_count: newMergeCount,
+                    email: combinedEmails
+                }).eq('id', targetReport.id);
+
+                if (updateErr) throw updateErr;
+
+                // 4. Fotos der angehängten Meldung löschen und angehängte Meldung entfernen
+                const filesToRemove = [];
+                if (sourceReport.foto_url) filesToRemove.push(sourceReport.foto_url);
+                if (sourceReport.loesung_foto_url) filesToRemove.push(sourceReport.loesung_foto_url);
+                if (filesToRemove.length > 0) {
+                    await db.storage.from('fotos-incoming').remove(filesToRemove);
+                }
+
+                const { error: delErr } = await db.from('reports').delete().eq('id', sourceReport.id);
+                if (delErr) throw delErr;
+
+                btn.disabled = false;
+                btn.classList.remove('btn-busy');
+                btn.innerText = "Jetzt zusammenführen";
+                closeMergeReportModal();
+                showActionToast(`✓ Meldungen zusammengeführt! Neuer Zähler: ${newMergeCount}`, "success");
+                await refreshCurrentMachineData();
+            } catch (err) {
+                btn.disabled = false;
+                btn.classList.remove('btn-busy');
+                btn.innerText = "Jetzt zusammenführen";
+                showActionToast("Fehler beim Zusammenführen: " + err.message, "error");
+            }
         }
 
         function openTechReportModal(reportId = null) {
@@ -677,6 +869,7 @@
             if (event.target.id === modalId) {
                 if (modalId === 'tech-report-modal') closeTechReportModal();
                 if (modalId === 'tech-resolve-modal') closeResolveModal();
+                if (modalId === 'tech-merge-modal') closeMergeReportModal();
             }
         }
 
@@ -697,9 +890,10 @@
             }
 
             saveBtn.disabled = true;
+            saveBtn.classList.add('btn-busy');
             statusEl.style.display = 'block';
             statusEl.style.color = 'var(--gold-light)';
-            statusEl.innerText = "Speichere...";
+            statusEl.innerText = fileInput.files[0] ? "⏳ Komprimiere Foto & speichere..." : "⏳ Speichere...";
 
             try {
                 const uploadedFilePath = fileInput.files[0]
@@ -715,7 +909,8 @@
                         status: 'offen',
                         verifiziert: true,
                         email: '',
-                        foto_url: uploadedFilePath || ''
+                        foto_url: uploadedFilePath || '',
+                        merge_count: 1
                     }]);
                     if (error) throw error;
                 } else {
@@ -737,12 +932,15 @@
                 }
 
                 saveBtn.disabled = false;
+                saveBtn.classList.remove('btn-busy');
                 closeTechReportModal();
+                showActionToast("✓ Meldung erfolgreich gespeichert!", "success");
                 await refreshCurrentMachineData();
             } catch (err) {
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler beim Speichern: " + err.message;
                 saveBtn.disabled = false;
+                saveBtn.classList.remove('btn-busy');
             }
         }
 
@@ -769,9 +967,10 @@
             const statusEl = document.getElementById('resolve-modal-status');
 
             saveBtn.disabled = true;
+            saveBtn.classList.add('btn-busy');
             statusEl.style.display = 'block';
             statusEl.style.color = 'var(--gold-light)';
-            statusEl.innerText = "Schließe Meldung ab...";
+            statusEl.innerText = fileInput.files[0] ? "⏳ Komprimiere Foto & schließe ab..." : "⏳ Schließe Meldung ab...";
 
             try {
                 const solutionPhotoPath = await uploadIncomingPhoto('reports', fileInput.files[0]);
@@ -787,12 +986,15 @@
                 if (error) throw error;
 
                 saveBtn.disabled = false;
+                saveBtn.classList.remove('btn-busy');
                 closeResolveModal();
+                showActionToast("✓ Meldung als behoben abgeschlossen!", "success");
                 await refreshCurrentMachineData();
             } catch (err) {
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler: " + err.message;
                 saveBtn.disabled = false;
+                saveBtn.classList.remove('btn-busy');
             }
         }
 
@@ -813,6 +1015,7 @@
                 return;
             }
 
+            showActionToast("Meldung gelöscht.", "info");
             await refreshCurrentMachineData();
         }
 

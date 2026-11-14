@@ -44,6 +44,11 @@
         let techTableSortCol = 'name';
         let techTableSortAsc = true;
 
+        function openTechDetailFromTable(pinballId) {
+            saveCurrentScrollPos();
+            window.location.href = `tech-detail?id=${pinballId}&from=techniker`;
+        }
+
         function getReportCountsHtml(pinballId) {
             const openReports = reportsDB.filter(r => r.pinballId === pinballId && r.status === 'offen');
             if (openReports.length === 0) {
@@ -61,7 +66,7 @@
             if (bCount > 0) badges.push(`<span class="count-b" title="${bCount}x Prio 3 (Kaum spürbar)">${bCount}</span>`);
             if (uCount > 0) badges.push(`<span class="count-u" title="${uCount}x Noch unverifiziert">${uCount}</span>`);
 
-            return `<div class="meldungen-counts" onclick="window.location.href='tech-detail?id=${pinballId}'">${badges.join('')}</div>`;
+            return `<div class="meldungen-counts" onclick="openTechDetailFromTable(${pinballId})">${badges.join('')}</div>`;
         }
 
         function getReportSortWeight(pinballId) {
@@ -113,7 +118,7 @@
                 tbody.innerHTML += `
                     <tr>
                         <td><strong style="color:var(--gold-light);">${p.short}</strong></td>
-                        <td><span class="clickable-name" onclick="window.location.href='tech-detail?id=${p.id}'">${p.name}</span></td>
+                        <td><span class="clickable-name" onclick="openTechDetailFromTable(${p.id})">${p.name}</span></td>
                         <td><span class="status-color-box ${statusColorClass}" title="${statusTooltip}"></span></td>
                         <td>${getReportCountsHtml(p.id)}</td>
                         <td>
@@ -131,6 +136,8 @@
             const btn = document.getElementById(`tech-table-pwr-btn-${pinballId}`);
             await togglePinballPower(pinballId, btn, (updatedPin) => {
                 if (btn) {
+                    btn.disabled = false;
+                    btn.classList.remove('btn-busy');
                     btn.innerText = updatedPin.power;
                     btn.style.color = updatedPin.power === 'ON' ? '#3fb950' : '#ff7b72';
                 }
@@ -146,13 +153,20 @@
             const btnOff = document.getElementById('bulk-pwr-off-btn');
             btnOn.disabled = true;
             btnOff.disabled = true;
+            const activeBtn = turnOn ? btnOn : btnOff;
+            const originalLabel = activeBtn.innerText;
+            activeBtn.classList.add('btn-busy');
+            activeBtn.innerText = turnOn ? "⏳ Schalte alle ein..." : "⏳ Schalte alle aus...";
 
             const { error } = await db.from('flipper').update({ an: turnOn }).in('id', targetIds);
 
             btnOn.disabled = false;
             btnOff.disabled = false;
+            activeBtn.classList.remove('btn-busy');
+            activeBtn.innerText = originalLabel;
 
             if (error) {
+                showActionToast("Fehler beim globalen Schalten: " + error.message, "error");
                 alert("Fehler beim globalen Schalten: " + error.message);
                 return;
             }
@@ -166,6 +180,7 @@
                 }
             });
             saveStateToCache();
+            showActionToast(turnOn ? `✓ Alle ${targetPins.length} aktiven Flipper eingeschaltet (ON)!` : `✓ Alle Flipper ausgeschaltet (OFF)!`, "success");
         }
 
         window.addEventListener('DOMContentLoaded', async () => {

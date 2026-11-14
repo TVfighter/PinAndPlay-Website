@@ -70,12 +70,11 @@
         let currentPinball = null;
 
         function goBackFromDetail() {
-            const params = new URLSearchParams(window.location.search);
-            if (navOriginFrom === 'highscores') {
+            if (navOriginDetail === 'highscores') {
                 const idParam = currentPinball ? `?id=${currentPinball.id}` : '';
-                window.location.href = `highscores${idParam}`;
+                navigateBackTo(`highscores${idParam}`);
             } else {
-                window.location.href = './';
+                navigateBackTo('./');
             }
         }
 
@@ -110,14 +109,23 @@
                 } else {
                     reportBtn.style.display = 'inline-block';
                     addScoreBtn.style.display = 'inline-flex';
+                    pwrBtn.style.display = 'inline-block';
+                    pwrBtn.classList.remove('btn-busy');
+
                     if (currentPinball.power === 'OFF') {
-                        pwrBtn.style.display = 'inline-block';
+                        pwrBtn.disabled = false;
                         pwrBtn.innerText = "Gerät anschalten";
                         pwrBtn.style.backgroundColor = 'var(--status-green)';
                         pwrBtn.style.color = 'white';
                         pwrBtn.style.borderColor = '#3fb950';
+                        pwrBtn.style.cursor = 'pointer';
                     } else {
-                        pwrBtn.style.display = 'none';
+                        pwrBtn.disabled = true;
+                        pwrBtn.innerText = "✓ Gerät ist eingeschaltet (ON)";
+                        pwrBtn.style.backgroundColor = '#16261b';
+                        pwrBtn.style.color = '#7ee787';
+                        pwrBtn.style.borderColor = '#2ea043';
+                        pwrBtn.style.cursor = 'default';
                     }
                 }
             }
@@ -125,6 +133,8 @@
 
         function goToHighscoreSubmit() {
             if (!currentPinball) return;
+            if (!ensureWritePermission()) return;
+            saveCurrentScrollPos();
             window.location.href = `highscores?submit=1&id=${currentPinball.id}&from=detail`;
         }
 
@@ -135,13 +145,17 @@
                 alert("Dieser Flipper befindet sich derzeit in Wartung (Inaktiv) und kann nicht gemeldet werden.");
                 return;
             }
+            saveCurrentScrollPos();
             document.getElementById('view-user-detail').classList.add('hidden');
             document.getElementById('view-report').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'instant' });
         }
 
         function closeUserReportView() {
             document.getElementById('view-report').classList.add('hidden');
             document.getElementById('view-user-detail').classList.remove('hidden');
+            const savedY = parseInt(sessionStorage.getItem(getNormalizedPageKey()) || '0', 10);
+            window.scrollTo({ top: savedY, behavior: 'instant' });
         }
 
         async function handleDetailPowerClick() {
@@ -154,6 +168,7 @@
 
         async function submitDefectReport() {
             if (!currentPinball) return;
+            if (!ensureWritePermission()) return;
             if (!isTechMode && !currentPinball.isAktiv) {
                 alert("Sicherheitssperre: Inaktive Flipper können nicht gemeldet werden.");
                 return;
@@ -167,11 +182,14 @@
             const submitBtn = document.getElementById('submit-report-btn');
 
             if (!desc) {
+                showActionToast("Bitte gib eine Beschreibung des Defekts ein!", "error");
                 alert("Bitte gib eine Beschreibung des Defekts ein!");
                 return;
             }
 
             submitBtn.disabled = true;
+            submitBtn.classList.add('btn-busy');
+            submitBtn.innerText = fileInput.files[0] ? "⏳ Komprimiere Foto & sende..." : "⏳ Sende Defekt-Meldung...";
             statusEl.style.display = 'block';
             statusEl.style.color = 'var(--gold-light)';
             statusEl.innerText = "Sende Defekt-Meldung...";
@@ -186,14 +204,19 @@
                     status: 'offen',
                     email: email,
                     verifiziert: false,
-                    foto_url: uploadedFilePath
+                    foto_url: uploadedFilePath,
+                    merge_count: 1
                 }]);
 
                 if (error) throw error;
 
                 await loadAllDatabaseData();
+                submitBtn.classList.remove('btn-busy');
+                submitBtn.innerText = "✓ Defekt erfolgreich gemeldet!";
                 statusEl.style.color = '#3fb950';
-                statusEl.innerText = "Defekt erfolgreich gemeldet!";
+                statusEl.innerText = "✓ Defekt erfolgreich gemeldet!";
+                showActionToast(`✓ Defekt für „${currentPinball.name}“ wurde gemeldet!`, "success");
+
                 document.getElementById('report-desc').value = '';
                 document.getElementById('report-email').value = '';
                 fileInput.value = '';
@@ -201,12 +224,16 @@
                 setTimeout(() => {
                     statusEl.style.display = 'none';
                     submitBtn.disabled = false;
+                    submitBtn.innerText = "Defekt absenden";
                     closeUserReportView();
-                }, 1000);
+                }, 1300);
             } catch (err) {
+                submitBtn.classList.remove('btn-busy');
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler beim Senden: " + err.message;
+                showActionToast("Fehler beim Senden: " + err.message, "error");
                 submitBtn.disabled = false;
+                submitBtn.innerText = "Defekt absenden";
             }
         }
 

@@ -1,10 +1,16 @@
-// 1. Tages-Token (?token=...) und Herkunft (?from=...) sofort auslesen und aus der Adresszeile entfernen
+// 1. Tages-Token (?token=...) und getrennte Herkunft (?from=...) sofort auslesen und aus der Adresszeile entfernen
 const DAILY_TOKEN_KEY = 'pinplay_daily_token';
-const NAV_FROM_KEY = 'pinplay_nav_origin';
-let navOriginFrom = sessionStorage.getItem(NAV_FROM_KEY) || '';
+const NAV_DETAIL_ORIGIN_KEY = 'pinplay_origin_detail';
+const NAV_HS_SUBMIT_ORIGIN_KEY = 'pinplay_origin_hs_submit';
+const BACK_NAV_FLAG_KEY = 'pinplay_is_back_nav';
+
+let navOriginDetail = sessionStorage.getItem(NAV_DETAIL_ORIGIN_KEY) || '';
+let navOriginHsSubmit = sessionStorage.getItem(NAV_HS_SUBMIT_ORIGIN_KEY) || '';
+let navOriginFrom = navOriginDetail;
 
 (function cleanUrlParameters() {
     const params = new URLSearchParams(window.location.search);
+    const path = window.location.pathname;
     let urlChanged = false;
 
     const scannedToken = params.get('token');
@@ -14,18 +20,27 @@ let navOriginFrom = sessionStorage.getItem(NAV_FROM_KEY) || '';
         urlChanged = true;
     }
 
+    const isHighscoresPage = path.endsWith('highscores') || path.endsWith('highscores.html');
+    const isDetailPage = path.endsWith('detail') || path.endsWith('detail.html') || path.endsWith('tech-detail') || path.endsWith('tech-detail.html');
+
     if (params.has('from')) {
-        navOriginFrom = params.get('from') || '';
-        sessionStorage.setItem(NAV_FROM_KEY, navOriginFrom);
+        const fromVal = params.get('from') || '';
+        if (isHighscoresPage) {
+            navOriginHsSubmit = fromVal;
+            sessionStorage.setItem(NAV_HS_SUBMIT_ORIGIN_KEY, fromVal);
+        } else {
+            navOriginDetail = fromVal;
+            navOriginFrom = fromVal;
+            sessionStorage.setItem(NAV_DETAIL_ORIGIN_KEY, fromVal);
+        }
         params.delete('from');
         urlChanged = true;
-    } else {
-        const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
-        const isReload = navEntries && navEntries.length > 0 && navEntries[0].type === 'reload';
-        if (!isReload) {
-            navOriginFrom = '';
-            sessionStorage.removeItem(NAV_FROM_KEY);
-        }
+    } else if (!isHighscoresPage && !isDetailPage) {
+        navOriginDetail = '';
+        navOriginHsSubmit = '';
+        navOriginFrom = '';
+        sessionStorage.removeItem(NAV_DETAIL_ORIGIN_KEY);
+        sessionStorage.removeItem(NAV_HS_SUBMIT_ORIGIN_KEY);
     }
 
     if (urlChanged) {
@@ -51,9 +66,10 @@ const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
 // Ziel-URL für das Pin&Play-Logo (Offizielle Homepage)
 const OFFICIAL_HOMEPAGE_URL = './';
 
-// Schlüssel für den dauerhaften Browser-Speicher
-const CACHE_KEY_STATE = 'pinplay_full_data_cache_v5';
-const CACHE_TTL_MS = 5 * 60 * 1000;
+// Schlüssel für den Browser-Speicher + 15-Sekunden-Intervall
+const CACHE_KEY_STATE = 'pinplay_full_data_cache_v6';
+const CACHE_TTL_MS = 15 * 1000;
+const LIVE_SYNC_INTERVAL_MS = 15 * 1000;
 
 // Globale Variablen
 let pinballs = [];
@@ -64,6 +80,82 @@ let playersDB = [];
 let isLoggedIn = false;
 let isTechMode = false;
 let hasValidDailyToken = false;
+let currentPageUpdateCallback = null;
+let liveSyncTimer = null;
+let isRestoringScroll = true;
+
+// --- SCROLL-POSITION SPEICHERN & BEIM ZURÜCK-BUTTON WIEDERHERSTELLEN ---
+
+function getNormalizedPageKey() {
+    let p = window.location.pathname.replace(/\.html$/, '');
+    if (p.endsWith('/')) p += 'index';
+    return 'pinplay_scroll_' + p;
+}
+
+function saveCurrentScrollPos() {
+    try {
+        sessionStorage.setItem(getNormalizedPageKey(), String(window.scrollY || 0));
+    } catch (e) {}
+}
+
+window.addEventListener('scroll', () => {
+    if (!isRestoringScroll) {
+        saveCurrentScrollPos();
+    }
+}, { passive: true });
+
+function navigateBackTo(targetUrl) {
+    sessionStorage.setItem(BACK_NAV_FLAG_KEY, 'true');
+    window.location.href = targetUrl;
+}
+
+function restoreScrollPositionIfNeeded() {
+    const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
+    const isBrowserBackForward = navEntries && navEntries.length > 0 && navEntries[0].type === 'back_forward';
+    const isCustomBack = sessionStorage.getItem(BACK_NAV_FLAG_KEY) === 'true';
+
+    if (isCustomBack || isBrowserBackForward) {
+        sessionStorage.removeItem(BACK_NAV_FLAG_KEY);
+        const savedY = parseInt(sessionStorage.getItem(getNormalizedPageKey()) || '0', 10);
+        if (savedY > 0) {
+            isRestoringScroll = true;
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: savedY, behavior: 'instant' });
+                setTimeout(() => {
+                    window.scrollTo({ top: savedY, behavior: 'instant' });
+                    isRestoringScroll = false;
+                }, 80);
+            });
+            return;
+        }
+    }
+    setTimeout(() => {
+        isRestoringScroll = false;
+    }, 80);
+}
+
+// --- VISUELLES TOAST-BANNER FÜR EINDEUTIGES BUTTON-FEEDBACK ---
+
+function showActionToast(message, type = 'success', durationMs = 3200) {
+    let container = document.getElementById('pinplay-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'pinplay-toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    const extraClass = type === 'error' ? 'toast-error' : (type === 'info' ? 'toast-info' : '');
+    toast.className = `pinplay-toast ${extraClass}`;
+    toast.innerText = message;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.transition = 'opacity 0.25s ease';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 260);
+    }, durationMs);
+}
 
 function formatScore(num) {
     return Number(num || 0).toLocaleString('de-DE');
@@ -103,6 +195,8 @@ function getStatusColorClass(status) {
 
 function stylePowerButton(btnElement, powerState) {
     if (!btnElement) return;
+    btnElement.disabled = false;
+    btnElement.classList.remove('btn-busy');
     btnElement.style.display = 'inline-block';
     btnElement.innerText = powerState;
     btnElement.style.backgroundColor = powerState === 'ON' ? '#16261b' : '#3b1818';
@@ -115,6 +209,7 @@ function ensureWritePermission() {
     if (isLoggedIn || isTechMode || hasValidDailyToken) {
         return true;
     }
+    showActionToast("Bitte scanne zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!", "error", 4000);
     alert("Zugangssperre: Um Highscores, Defekte oder Feedback einzureichen, scanne bitte zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!");
     return false;
 }
@@ -179,9 +274,9 @@ function getFormattedPlayerDisplay(rawInitials) {
 // Ermittelt, welcher Haupt-Tab oben im Banner gerade aktiv ist
 function getActiveNavTab() {
     const path = window.location.pathname;
-    if (path.endsWith('highscores') || path.endsWith('/highscores')) return 'highscores';
-    if (path.endsWith('tech-feedback') || path.endsWith('/tech-feedback')) return 'tech-feedback';
-    if (path.endsWith('tech-players') || path.endsWith('/tech-players')) return 'tech-players';
+    if (path.endsWith('highscores') || path.endsWith('/highscores') || path.endsWith('highscores.html')) return 'highscores';
+    if (path.endsWith('tech-feedback') || path.endsWith('/tech-feedback') || path.endsWith('tech-feedback.html')) return 'tech-feedback';
+    if (path.endsWith('tech-players') || path.endsWith('/tech-players') || path.endsWith('tech-players.html')) return 'tech-players';
     return 'overview';
 }
 
@@ -307,20 +402,20 @@ function toggleTechMode() {
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
-    const fromSuffix = navOriginFrom ? `&from=${navOriginFrom}` : '';
+    const fromSuffix = navOriginDetail ? `&from=${navOriginDetail}` : '';
 
     if (isTechMode) {
-        if ((path.endsWith('detail') || path.endsWith('/detail')) && id) {
+        if ((path.endsWith('detail') || path.endsWith('/detail') || path.endsWith('detail.html')) && id) {
             window.location.href = `tech-detail?id=${id}${fromSuffix}`;
-        } else if (path.endsWith('highscores') || path.endsWith('/highscores')) {
+        } else if (path.endsWith('highscores') || path.endsWith('/highscores') || path.endsWith('highscores.html')) {
             window.location.reload();
         } else {
             window.location.href = 'techniker';
         }
     } else {
-        if ((path.endsWith('tech-detail') || path.endsWith('/tech-detail')) && id) {
+        if ((path.endsWith('tech-detail') || path.endsWith('/tech-detail') || path.endsWith('tech-detail.html')) && id) {
             window.location.href = `detail?id=${id}${fromSuffix}`;
-        } else if (path.endsWith('highscores') || path.endsWith('/highscores')) {
+        } else if (path.endsWith('highscores') || path.endsWith('/highscores') || path.endsWith('highscores.html')) {
             window.location.reload();
         } else {
             window.location.href = './';
@@ -384,7 +479,26 @@ async function verifyDailyTokenStatus() {
     }
 }
 
+// --- 15-SEKUNDEN-LIVE-SYNC FÜR TECHNIKER & NUTZER MIT GÜLTIGEM TOKEN ---
+
+function startLiveSyncPolling() {
+    if (liveSyncTimer) clearInterval(liveSyncTimer);
+    liveSyncTimer = setInterval(async () => {
+        if (document.hidden) return;
+        if (!isLoggedIn && !isTechMode && !hasValidDailyToken) return;
+
+        try {
+            await loadAllDatabaseData();
+            renderSharedHeader();
+            if (typeof currentPageUpdateCallback === 'function') {
+                currentPageUpdateCallback();
+            }
+        } catch (e) {}
+    }, LIVE_SYNC_INTERVAL_MS);
+}
+
 async function initSharedApp(onBackgroundUpdate = null) {
+    currentPageUpdateCallback = onBackgroundUpdate;
     isLoggedIn = localStorage.getItem('pinplay_logged_in') === 'true';
     isTechMode = isLoggedIn && localStorage.getItem('pinplay_tech_mode') === 'true';
     const cacheStatus = restoreStateFromCache();
@@ -392,13 +506,21 @@ async function initSharedApp(onBackgroundUpdate = null) {
     checkHashLogin();
 
     if (cacheStatus.loaded) {
-        verifyDailyTokenStatus();
+        if (!hasValidDailyToken && localStorage.getItem(DAILY_TOKEN_KEY)) {
+            await verifyDailyTokenStatus();
+            saveStateToCache();
+        } else {
+            verifyDailyTokenStatus().then(() => startLiveSyncPolling());
+        }
+        startLiveSyncPolling();
+        setTimeout(restoreScrollPositionIfNeeded, 20);
+
         if (!cacheStatus.isFresh) {
             (async () => {
                 await syncSessionInBackground();
                 await loadAllDatabaseData();
                 renderSharedHeader();
-                if (typeof onBackgroundUpdate === 'function') onBackgroundUpdate();
+                if (typeof currentPageUpdateCallback === 'function') currentPageUpdateCallback();
             })();
         } else {
             syncSessionInBackground();
@@ -410,6 +532,8 @@ async function initSharedApp(onBackgroundUpdate = null) {
     await verifyDailyTokenStatus();
     await loadAllDatabaseData();
     renderSharedHeader();
+    setTimeout(restoreScrollPositionIfNeeded, 20);
+    startLiveSyncPolling();
 }
 
 async function syncSessionInBackground() {
@@ -479,6 +603,8 @@ async function loadAllDatabaseData() {
             if (parsed >= 1 && parsed <= 3) prioNum = parsed;
         }
 
+        const parsedMergeCount = parseInt(r.merge_count, 10);
+
         return {
             id: r.id,
             pinballId: r.flipper_id,
@@ -492,7 +618,8 @@ async function loadAllDatabaseData() {
             text: r.meldung || '',
             ursache: r.ursache || '',
             loesungsweg: r.loesungsweg || '',
-            loesung_foto_url: r.loesung_foto_url || ''
+            loesung_foto_url: r.loesung_foto_url || '',
+            mergeCount: (!isNaN(parsedMergeCount) && parsedMergeCount >= 1) ? parsedMergeCount : 1
         };
     });
 
@@ -550,11 +677,62 @@ async function loadAllDatabaseData() {
     saveStateToCache();
 }
 
+// --- CLIENTSEITIGE BILDKOMPRIMIERUNG VOR DEM UPLOAD ---
+
+async function compressImageFile(file, maxDimension = 1600, quality = 0.78) {
+    if (!file || !file.type || !file.type.startsWith('image/')) return file;
+
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxDimension || height > maxDimension) {
+                    if (width >= height) {
+                        height = Math.round((height * maxDimension) / width);
+                        width = maxDimension;
+                    } else {
+                        width = Math.round((width * maxDimension) / height);
+                        height = maxDimension;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        resolve(file);
+                        return;
+                    }
+                    const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+                    const compressedFile = new File([blob], `${baseName}.jpg`, {
+                        type: 'image/jpeg',
+                        lastModified: Date.now()
+                    });
+                    resolve(compressedFile);
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = () => resolve(file);
+            img.src = event.target.result;
+        };
+        reader.onerror = () => resolve(file);
+        reader.readAsDataURL(file);
+    });
+}
+
 async function uploadIncomingPhoto(folder, file) {
     if (!file) return '';
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const compressed = await compressImageFile(file, 1600, 0.78);
+    const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = `${folder}/${Date.now()}_${safeName}`;
-    const { error } = await db.storage.from('fotos-incoming').upload(filePath, file);
+    const { error } = await db.storage.from('fotos-incoming').upload(filePath, compressed);
     if (error) throw error;
     return filePath;
 }
@@ -582,6 +760,7 @@ async function togglePinballPower(pinballId, btnElement, onDone = null) {
     if (!targetPin) return;
 
     if (!isTechMode && !targetPin.isAktiv) {
+        showActionToast("Sicherheitssperre: Inaktive Flipper können nicht eingeschaltet werden!", "error");
         alert("Sicherheitssperre: Inaktive Flipper können nicht eingeschaltet werden!");
         return;
     }
@@ -592,15 +771,24 @@ async function togglePinballPower(pinballId, btnElement, onDone = null) {
 
     const isCurrentlyOn = targetPin.power === 'ON';
     if (isCurrentlyOn && !isTechMode) {
-        alert("Sicherheitssperre: Nur Techniker dürfen Flipper wieder ausschalten!");
+        showActionToast(`„${targetPin.name}“ ist bereits eingeschaltet!`, "info");
         return;
     }
 
     const newState = !isCurrentlyOn;
-    if (btnElement) btnElement.innerText = "...";
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.classList.add('btn-busy');
+        btnElement.innerText = newState ? "⏳ Schalte ein..." : "⏳ Schalte aus...";
+    }
 
     const { error } = await db.from('flipper').update({ an: newState }).eq('id', targetPin.id);
     if (error) {
+        if (btnElement) {
+            btnElement.disabled = false;
+            btnElement.classList.remove('btn-busy');
+        }
+        showActionToast("Fehler beim Schalten: " + error.message, "error");
         alert("Fehler beim Speichern: " + error.message);
         if (typeof onDone === 'function') onDone(targetPin);
         return;
@@ -608,6 +796,13 @@ async function togglePinballPower(pinballId, btnElement, onDone = null) {
 
     targetPin.power = newState ? 'ON' : 'OFF';
     saveStateToCache();
+
+    if (newState) {
+        showActionToast(`✓ Flipper „${targetPin.name}“ wurde erfolgreich eingeschaltet!`, "success");
+    } else {
+        showActionToast(`Flipper „${targetPin.name}“ wurde ausgeschaltet (OFF).`, "info");
+    }
+
     if (typeof onDone === 'function') onDone(targetPin);
 }
 

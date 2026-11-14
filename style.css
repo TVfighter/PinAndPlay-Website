@@ -1092,3 +1092,71 @@ th.sortable-th:hover { background-color: #282c36; color: var(--gold-light); }
         width: 44px !important;
     }
 }
+
+/* ==========================================================================
+ *  VISUELLES BUTTON-FEEDBACK, TOAST-BANNER & MERGE-BADGE
+ *  ========================================================================== */
+#pinplay-toast-container {
+position: fixed;
+top: 20px;
+left: 50%;
+transform: translateX(-50%);
+z-index: 9999;
+display: flex;
+flex-direction: column;
+gap: 10px;
+pointer-events: none;
+width: 92%;
+max-width: 480px;
+}
+
+.pinplay-toast {
+    background: #16261b;
+    color: #7ee787;
+    border: 2px solid #2ea043;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.85);
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: bold;
+    text-align: center;
+    animation: toastSlideIn 0.22s ease-out;
+}
+
+.pinplay-toast.toast-info {
+    background: #241d0b;
+    color: var(--gold-light);
+    border-color: var(--gold-mid);
+}
+
+.pinplay-toast.toast-error {
+    background: #3b1818;
+    color: #ff7b72;
+    border-color: #cf3432;
+}
+
+@keyframes toastSlideIn {
+    from { opacity: 0; transform: translateY(-16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+button:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.btn-busy {
+    opacity: 0.85 !important;
+    cursor: wait !important;
+    box-shadow: 0 0 14px rgba(212, 175, 55, 0.5) !important;
+}
+
+.badge-merged {
+    display: inline-block;
+    background: rgba(56, 139, 253, 0.18);
+    color: #79c0ff;
+    border: 1px solid var(--primary-blue);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+}
