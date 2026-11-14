@@ -1,17 +1,10 @@
-const CACHE_NAME = 'pinplay-static-v10';
+const CACHE_NAME = 'pinplay-static-v12';
 const STATIC_ASSETS = [
-    'index.html',
-    'detail.html',
-    'highscores.html',
-    'techniker.html',
-    'tech-detail.html',
-    'tech-feedback.html',
-    'tech-players.html',
     'style.css',
-    'app.js',
-    'logo.png',
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-    'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
+'app.js',
+'logo.png',
+'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -24,7 +17,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((keys) =>
-            Promise.all(keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : null)))
+        Promise.all(keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : null)))
         ).then(() => self.clients.claim())
     );
 });
@@ -35,34 +28,31 @@ self.addEventListener('fetch', (event) => {
 
     const url = new URL(req.url);
 
+    // 1. Browser-Erweiterungen (chrome-extension://) sofort ignorieren
+    if (!url.protocol.startsWith('http')) return;
+
+    // 2. HTML-Seitenwechsel (Klicks auf Unterseiten) immer direkt über Nginx ausliefern
+    if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
+        return;
+    }
+
+    // 3. Live-Datenbankabfragen an Supabase nicht im Service Worker cachen
     if (url.hostname.includes('supabase.co') && !url.pathname.includes('/flipper-fotos/')) {
         return;
     }
 
+    // 4. Nur statische Dateien (CSS, JS, Logo, Flipper-Fotos) schnell aus dem Cache liefern
     event.respondWith(
         caches.open(CACHE_NAME).then(async (cache) => {
-            const isLocalPageOrAsset = url.origin === self.location.origin;
+            const isLocalAsset = url.origin === self.location.origin;
 
-            // 1. Direkter Treffer im Cache
             let cachedResponse = await cache.match(req, {
-                ignoreSearch: isLocalPageOrAsset
+                ignoreSearch: isLocalAsset
             });
 
-            // 2. Falls eine saubere URL ohne ".html" (z.B. /highscores oder /detail?id=1) aufgerufen wird,
-            //    automatisch die passende .html-Vorlage aus dem Cache holen
-            if (!cachedResponse && isLocalPageOrAsset) {
-                let fallbackPath = url.pathname;
-                if (fallbackPath.endsWith('/')) {
-                    fallbackPath += 'index.html';
-                } else if (!fallbackPath.includes('.')) {
-                    fallbackPath += '.html';
-                }
-                cachedResponse = await cache.match(fallbackPath, { ignoreSearch: true });
-            }
-
             const networkFetch = fetch(req).then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
-                    const cacheKey = isLocalPageOrAsset ? url.pathname : req;
+                if (networkResponse && networkResponse.status === 200 && !networkResponse.redirected) {
+                    const cacheKey = isLocalAsset ? url.pathname : req;
                     cache.put(cacheKey, networkResponse.clone());
                 }
                 return networkResponse;
