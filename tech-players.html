@@ -27,7 +27,7 @@
     <div id="view-tech-players-main" class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="window.location.href='techniker'" title="Zurück zum Techniker-Dashboard">←</button>
+                <button class="btn-back" onclick="navigateBackTo('techniker')" title="Zurück zum Techniker-Dashboard">←</button>
                 <h2 style="margin: 0;">Spieler-Kürzel &amp; Tages-QR-Code</h2>
             </div>
         </div>
@@ -80,7 +80,6 @@
                 <label><strong>Weitere Such-Kürzel / Aliase (Kommagetrennt, optional)</strong></label>
                 <input type="text" id="pl-aliases" placeholder="z.B. VAL, VALENTIN, TVFIGHTER, TVF">
 
-                <!-- Dynamische Felder für alle Flipper mit mehr als 3 Zeichen (z.B. Stern & JJP) -->
                 <div style="margin-top: 10px; margin-bottom: 15px; padding: 12px; background: var(--surface-elevated); border: 1px solid var(--border-subtle); border-radius: 6px;">
                     <div style="font-weight: bold; color: var(--gold-light); margin-bottom: 6px; font-size: 14px;">
                         Name pro Flipper (für Geräte mit mehr als 3 Zeichen, z.B. Stern / JJP):
@@ -146,7 +145,7 @@
         function copyQrLink() {
             if (!currentQrUrl) return;
             navigator.clipboard.writeText(currentQrUrl);
-            alert("QR-Check-In-Link wurde in die Zwischenablage kopiert:\n" + currentQrUrl);
+            showActionToast("✓ QR-Check-In-Link in die Zwischenablage kopiert!", "success");
         }
 
         function enterKioskMode() {
@@ -245,11 +244,10 @@
                 else clearPinWrap.classList.add('hidden');
             }
 
-            // Eingabefelder für alle Flipper mit hsMaxLength > 3 (z.B. Stern / JJP) aufbauen
             const longNamePins = pinballs.filter(p => p.hsMaxLength > 3);
             perFlipperBox.innerHTML = '';
             if (longNamePins.length === 0) {
-                perFlipperBox.innerHTML = '<i style="font-size:12px; color:var(--text-muted);">Keine Flipper mit > 3 Zeichen in der Datenbank gefunden.</i>';
+                perFlipperBox.innerHTML = '<i style="font-size:12px; color:var(--text-muted);">Keine Flipper mit mehr als 3 Zeichen in der Datenbank gefunden.</i>';
             } else {
                 longNamePins.forEach(p => {
                     const existingVal = (target && target.flipperTags && target.flipperTags[String(p.id)]) ? target.flipperTags[String(p.id)] : '';
@@ -278,7 +276,7 @@
             const clearPin = document.getElementById('pl-clear-pin').checked;
 
             if (!dispName || !shortTag) {
-                alert("Bitte gib mindestens einen Haupt-Anzeigenamen und das 3er-Standardkürzel ein!");
+                showActionToast("Bitte gib mindestens einen Haupt-Anzeigenamen und das 3er-Standardkürzel ein!", "error");
                 return;
             }
 
@@ -312,10 +310,11 @@
 
                 saveBtn.disabled = false;
                 closePlayerModal();
+                showActionToast(`✓ Spieler-Profil „${dispName}“ gespeichert!`, "success");
                 await loadAllDatabaseData();
                 renderPlayersList();
             } catch (err) {
-                alert("Fehler beim Speichern: " + err.message);
+                showActionToast("Fehler beim Speichern: " + err.message, "error");
                 saveBtn.disabled = false;
             }
         }
@@ -324,9 +323,10 @@
             if (!confirm("Möchtest du dieses Spieler-Profil wirklich löschen?")) return;
             const { error } = await db.from('players').delete().eq('id', playerId);
             if (error) {
-                alert("Fehler beim Löschen: " + error.message);
+                showActionToast("Fehler beim Löschen: " + error.message, "error");
                 return;
             }
+            showActionToast("Spieler-Profil gelöscht.", "info");
             await loadAllDatabaseData();
             renderPlayersList();
         }
@@ -350,7 +350,6 @@
 
             renderPlayersList();
             loadAndRenderDailyQr();
-            // Aktualisiert den QR-Code im Kiosk-Betrieb alle 15 Minuten automatisch
             setInterval(loadAndRenderDailyQr, 15 * 60 * 1000);
         });
     </script>

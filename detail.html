@@ -92,7 +92,6 @@
             const addScoreBtn = document.getElementById('detail-add-score-btn');
             const inactiveBadge = document.getElementById('detail-inactive-badge');
 
-            // Hinweisschild "Außer Betrieb" anzeigen, sobald der Flipper inaktiv ist
             if (inactiveBadge) {
                 if (!currentPinball.isAktiv) inactiveBadge.classList.remove('hidden');
                 else inactiveBadge.classList.add('hidden');
@@ -121,7 +120,6 @@
                         pwrBtn.style.borderColor = '#3fb950';
                         pwrBtn.style.cursor = 'pointer';
                     } else {
-                        // Keine dauerhafte Anzeige, wenn der Flipper bereits eingeschaltet ist
                         pwrBtn.style.display = 'none';
                     }
                 }
@@ -139,7 +137,7 @@
             if (!currentPinball) return;
             if (!ensureWritePermission()) return;
             if (!isTechMode && !currentPinball.isAktiv) {
-                alert("Dieser Flipper befindet sich derzeit in Wartung (Inaktiv) und kann nicht gemeldet werden.");
+                showActionToast("Dieser Flipper befindet sich derzeit in Wartung (Inaktiv) und kann nicht gemeldet werden.", "error");
                 return;
             }
             saveCurrentScrollPos();
@@ -168,7 +166,7 @@
             if (!currentPinball) return;
             if (!ensureWritePermission()) return;
             if (!isTechMode && !currentPinball.isAktiv) {
-                alert("Sicherheitssperre: Inaktive Flipper können nicht gemeldet werden.");
+                showActionToast("Sicherheitssperre: Inaktive Flipper können nicht gemeldet werden.", "error");
                 return;
             }
 
@@ -181,7 +179,6 @@
 
             if (!desc) {
                 showActionToast("Bitte gib eine Beschreibung des Defekts ein!", "error");
-                alert("Bitte gib eine Beschreibung des Defekts ein!");
                 return;
             }
 

@@ -136,7 +136,7 @@ function restoreScrollPositionIfNeeded() {
 
 // --- VISUELLES TOAST-BANNER FÜR EINDEUTIGES BUTTON-FEEDBACK ---
 
-function showActionToast(message, type = 'success', durationMs = 3200) {
+function showActionToast(message, type = 'success', durationMs = 3500) {
     let container = document.getElementById('pinplay-toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -204,13 +204,12 @@ function stylePowerButton(btnElement, powerState) {
     btnElement.style.borderColor = powerState === 'ON' ? '#2ea043' : '#cf3432';
 }
 
-// Prüft vor dem Eintragen (Highscore, Defekt, Feedback), ob ein gültiger Tages-QR-Code gescannt wurde
+// Prüft vor dem Eintragen/Schalten, ob ein gültiger Tages-QR-Code gescannt wurde (zeigt nur das eigene Toast-Popup)
 function ensureWritePermission() {
     if (isLoggedIn || isTechMode || hasValidDailyToken) {
         return true;
     }
-    showActionToast("Bitte scanne zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!", "error", 4000);
-    alert("Zugangssperre: Um Highscores, Defekte oder Feedback einzureichen, scanne bitte zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!");
+    showActionToast("Zugangssperre: Bitte scanne zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!", "error", 4500);
     return false;
 }
 
@@ -246,18 +245,15 @@ function getProfileNameForPinball(prof, pin) {
     if (!prof || !pin) return '';
     const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
 
-    // 1. Alle Flipper mit max. 3 Zeichen (inkl. 0) nutzen immer das 3er-Standardkürzel
     if (effectiveMaxLen <= 3) {
         return (prof.shortInitials || prof.displayName).toUpperCase().substring(0, 3);
     }
 
-    // 2. Bei längeren Namen (z.B. Stern vs. JJP): Prüfen, ob für diesen Flipper ein eigener Name hinterlegt ist
     const customForPin = prof.flipperTags ? prof.flipperTags[String(pin.id)] : null;
     if (customForPin && String(customForPin).trim() !== '') {
         return String(customForPin).trim().toUpperCase().substring(0, effectiveMaxLen);
     }
 
-    // 3. Fallback für lange Flipper ohne Sondereintrag: Haupt-Anzeigename
     return prof.displayName.toUpperCase().substring(0, effectiveMaxLen);
 }
 
@@ -380,6 +376,7 @@ async function doLogin() {
     }
 }
 
+// Logout behält wie gewünscht das klassische Browser-Confirm-Popup
 async function doLogout() {
     if (!confirm("Möchtest du dich wirklich ausloggen?")) return;
     await db.auth.signOut();
@@ -761,7 +758,6 @@ async function togglePinballPower(pinballId, btnElement, onDone = null) {
 
     if (!isTechMode && !targetPin.isAktiv) {
         showActionToast("Sicherheitssperre: Inaktive Flipper können nicht eingeschaltet werden!", "error");
-        alert("Sicherheitssperre: Inaktive Flipper können nicht eingeschaltet werden!");
         return;
     }
 
@@ -789,7 +785,6 @@ async function togglePinballPower(pinballId, btnElement, onDone = null) {
             btnElement.classList.remove('btn-busy');
         }
         showActionToast("Fehler beim Schalten: " + error.message, "error");
-        alert("Fehler beim Speichern: " + error.message);
         if (typeof onDone === 'function') onDone(targetPin);
         return;
     }

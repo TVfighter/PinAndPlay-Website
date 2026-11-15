@@ -286,13 +286,13 @@
             const requestedPin = preselectedPinballId ? pinballs.find(p => p.id === Number(preselectedPinballId)) : null;
 
             if (!isTechMode && preselectedPinballId && requestedPin && !requestedPin.isAktiv) {
-                alert("Dieser Flipper ist derzeit außer Betrieb (Wartung). Highscores können aktuell nicht eingetragen werden.");
+                showActionToast("Dieser Flipper ist derzeit außer Betrieb (Wartung). Highscores können aktuell nicht eingetragen werden.", "error");
                 return;
             }
 
             const selectablePins = isTechMode ? pinballs : pinballs.filter(p => p.isAktiv);
             if (selectablePins.length === 0) {
-                alert("Derzeit sind keine aktiven Flipper für Highscore-Eintragungen verfügbar.");
+                showActionToast("Derzeit sind keine aktiven Flipper für Highscore-Eintragungen verfügbar.", "error");
                 return;
             }
 
@@ -469,7 +469,7 @@
             if (!pin) return;
 
             if (!isTechMode && !pin.isAktiv) {
-                alert("Sicherheitssperre: Für einen inaktiven Flipper können keine Highscores eingetragen werden!");
+                showActionToast("Sicherheitssperre: Für einen inaktiven Flipper können keine Highscores eingetragen werden!", "error");
                 return;
             }
 
@@ -490,7 +490,6 @@
 
             if (!pinId || !initials || !scoreVal || isNaN(scoreVal) || scoreVal <= 0) {
                 showActionToast("Bitte gib gültige Initialen und eine Punktzahl ein!", "error");
-                alert("Bitte wähle einen Flipper und gib gültige Initialen sowie eine Punktzahl ein!");
                 return;
             }
 
@@ -503,7 +502,6 @@
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "⚠️ Absenden blockiert: Bitte wähle zuerst ein Beweisfoto vom Flipper-Display aus!";
                 showActionToast("⚠️ Beweisfoto fehlt! Für jeden Highscore ist ein Foto vom Display Pflicht.", "error", 4200);
-                alert("Beweisfoto fehlt!\n\nFür jeden Highscore muss zwingend ein Beweisfoto vom Flipper-Display hochgeladen werden. Bitte wähle zuerst ein Foto aus.");
                 return;
             }
 
@@ -511,8 +509,7 @@
             if (pin.hsMaxLength === 0) {
                 const duplicateExactScore = highscoresDB.some(h => h.pinballId === pinId && h.score === scoreVal);
                 if (duplicateExactScore) {
-                    showActionToast("Exakt dieser Punktestand wurde an diesem Gerät bereits eingereicht!", "error");
-                    alert(`Sicherheitssperre für Geräte ohne Namensanzeige: Exakt dieser Punktestand (${formatScore(scoreVal)}) wurde an „${pin.name}“ bereits eingereicht!`);
+                    showActionToast(`Exakt dieser Punktestand (${formatScore(scoreVal)}) wurde an „${pin.name}“ bereits eingereicht!`, "error", 4200);
                     return;
                 }
             } else {
@@ -531,7 +528,7 @@
             if (verifiedPlayerScores.length > 0) {
                 const currentBest = Math.max(...verifiedPlayerScores.map(s => s.score));
                 if (scoreVal <= currentBest) {
-                    alert(`Eintrag nicht möglich: Dein neuer Score (${formatScore(scoreVal)} Punkte) muss höher sein als dein bisheriger verifizierter Rekord (${formatScore(currentBest)} Punkte) an diesem Gerät!`);
+                    showActionToast(`Dein neuer Score (${formatScore(scoreVal)}) muss höher sein als dein bisheriger Rekord (${formatScore(currentBest)})!`, "error", 4500);
                     return;
                 }
             }
@@ -549,7 +546,7 @@
 
                     if (!activePin) {
                         document.getElementById('hs-pin-protect-box').classList.remove('hidden');
-                        alert(`Für das Kürzel „${matchedProfile.displayName}“ ist eine PIN hinterlegt. Bitte gib deine PIN ein!`);
+                        showActionToast(`Für das Kürzel „${matchedProfile.displayName}“ ist eine PIN hinterlegt. Bitte gib deine PIN ein!`, "info", 4200);
                         isSubmittingHighscore = false;
                         submitBtn.disabled = false;
                         submitBtn.classList.remove('btn-busy');
@@ -565,7 +562,7 @@
                         localStorage.removeItem(`pinplay_player_pin_${matchedProfile.id}`);
                         document.getElementById('hs-pin-protect-box').classList.remove('hidden');
                         document.getElementById('hs-player-pin').value = '';
-                        alert("Falsche Spieler-PIN! Bitte gib die korrekte PIN ein.");
+                        showActionToast("Falsche Spieler-PIN! Bitte gib die korrekte PIN ein.", "error", 4000);
                         isSubmittingHighscore = false;
                         submitBtn.disabled = false;
                         submitBtn.classList.remove('btn-busy');

@@ -320,7 +320,6 @@
 
             if (error) {
                 showActionToast("Fehler beim Ändern des Status: " + error.message, "error");
-                alert("Fehler beim Ändern des Status: " + error.message);
                 statusBtn.innerText = "Status: " + currentPinball.status;
                 return;
             }
@@ -486,7 +485,6 @@
                     ? '<span class="badge-verified">Verifiziert</span>'
                     : '<span class="badge-unverified">Wartet auf Verifizierung</span>';
 
-                // Klick auf "Verifizieren" öffnet zuerst das Popout-Fenster mit dem Beweisfoto
                 const verifyBtn = !h.verifiziert
                     ? `<button class="btn-green" onclick="openVerifyHighscoreModal(${h.id})">Verifizieren</button>`
                     : '';
@@ -583,7 +581,7 @@
             if (existingVerified.length > 0) {
                 const currentBest = Math.max(...existingVerified.map(s => s.score));
                 if (target.score <= currentBest) {
-                    alert(`Hinweis: Der Spieler "${getFormattedPlayerDisplay(target.initials)}" hat an diesem Gerät bereits einen höheren (oder gleich hohen) verifizierten Rekord (${formatScore(currentBest)} Punkte). Ein niedrigerer Score (${formatScore(target.score)} Punkte) kann den Rekord nicht überschreiben.`);
+                    showActionToast(`Hinweis: „${getFormattedPlayerDisplay(target.initials)}“ hat an diesem Gerät bereits einen höheren/gleichen Rekord (${formatScore(currentBest)} Punkte)!`, "error", 4500);
                     return;
                 }
             }
@@ -594,12 +592,10 @@
             confirmBtn.innerText = "⏳ Verifiziere & lösche Beweisfoto...";
 
             try {
-                // 1. Beweisfoto aus dem Storage löschen, sobald der Score verifiziert wird
                 if (target.beweisfoto) {
                     await db.storage.from('fotos-incoming').remove([target.beweisfoto]);
                 }
 
-                // 2. Highscore auf verifiziert setzen und Foto-Verweis leeren
                 const { error } = await db.from('highscore').update({
                     verifiziert: true,
                     beweisfoto: ''
@@ -607,7 +603,6 @@
 
                 if (error) throw error;
 
-                // 3. Ältere niedrigere Rekorde desselben Spielers an diesem Gerät entfernen
                 await removeOldLowerPlayerScores(target.pinballId, target.initials, target.id, target.score);
 
                 closeVerifyHighscoreModal();
@@ -617,7 +612,7 @@
                 confirmBtn.disabled = false;
                 confirmBtn.classList.remove('btn-busy');
                 confirmBtn.innerText = "✓ Foto bestätigt — Jetzt verifizieren & Foto löschen";
-                alert("Fehler beim Verifizieren: " + err.message);
+                showActionToast("Fehler beim Verifizieren: " + err.message, "error");
             }
         }
 
@@ -633,7 +628,7 @@
             }
             const { error } = await db.from('highscore').delete().eq('id', target.id);
             if (error) {
-                alert("Fehler beim Löschen: " + error.message);
+                showActionToast("Fehler beim Löschen: " + error.message, "error");
                 return;
             }
             closeVerifyHighscoreModal();
@@ -646,7 +641,7 @@
             if (filePath) await db.storage.from('fotos-incoming').remove([filePath]);
             const { error } = await db.from('highscore').delete().eq('id', hsId);
             if (error) {
-                alert("Fehler beim Löschen: " + error.message);
+                showActionToast("Fehler beim Löschen: " + error.message, "error");
                 return;
             }
             showActionToast("Highscore gelöscht.", "info");
@@ -1012,7 +1007,7 @@
             const statusEl = document.getElementById('modal-report-status');
 
             if (!desc) {
-                alert("Bitte gib eine Beschreibung des Defekts ein!");
+                showActionToast("Bitte gib eine Beschreibung des Defekts ein!", "error");
                 return;
             }
 
@@ -1066,6 +1061,7 @@
             } catch (err) {
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler beim Speichern: " + err.message;
+                showActionToast("Fehler beim Speichern: " + err.message, "error");
                 saveBtn.disabled = false;
                 saveBtn.classList.remove('btn-busy');
             }
@@ -1120,6 +1116,7 @@
             } catch (err) {
                 statusEl.style.color = '#ff7b72';
                 statusEl.innerText = "Fehler: " + err.message;
+                showActionToast("Fehler: " + err.message, "error");
                 saveBtn.disabled = false;
                 saveBtn.classList.remove('btn-busy');
             }
@@ -1138,7 +1135,7 @@
 
             const { error } = await db.from('reports').delete().eq('id', reportId);
             if (error) {
-                alert("Fehler beim Löschen: " + error.message);
+                showActionToast("Fehler beim Löschen: " + error.message, "error");
                 return;
             }
 
