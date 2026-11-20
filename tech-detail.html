@@ -272,6 +272,10 @@
             if (navOriginDetail === 'highscores') {
                 const idParam = currentPinball ? `?id=${currentPinball.id}` : '';
                 navigateBackTo(`highscores${idParam}`);
+            } else if (navOriginDetail === 'tech-feed') {
+                navigateBackTo('tech-feed');
+            } else if (navOriginDetail === 'tech-parts') {
+                navigateBackTo('tech-parts');
             } else if (navOriginDetail === 'index') {
                 navigateBackTo('./');
             } else {
@@ -289,6 +293,8 @@
             const statusBtn = document.getElementById('tech-detail-status-btn');
             statusBtn.innerText = "Status: " + currentPinball.status;
             statusBtn.className = "btn-status-tech " + getStatusColorClass(currentPinball.status);
+            document.getElementById('tech-detail-power').style.display = hasPerm('power_off') ? 'inline-block' : 'none';
+            statusBtn.style.display = hasPerm('manage_reports') ? 'inline-block' : 'none';
         }
 
         function goToTechHighscoreSubmit() {
@@ -485,8 +491,12 @@
                     ? '<span class="badge-verified">Verifiziert</span>'
                     : '<span class="badge-unverified">Wartet auf Verifizierung</span>';
 
-                const verifyBtn = !h.verifiziert
+                const canVerifyHs = hasPerm('verify_highscores');
+                const verifyBtn = (!h.verifiziert && canVerifyHs)
                     ? `<button class="btn-green" onclick="openVerifyHighscoreModal(${h.id})">Verifizieren</button>`
+                    : '';
+                const delHsBtn = canVerifyHs
+                    ? `<button class="btn-report" onclick="deleteHighscore(${h.id}, '${safeFoto}')">Löschen</button>`
                     : '';
 
                 container.innerHTML += `
@@ -499,7 +509,7 @@
                             </div>
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                                 ${verifyBtn}
-                                <button class="btn-report" onclick="deleteHighscore(${h.id}, '${safeFoto}')">Löschen</button>
+                                ${delHsBtn}
                             </div>
                         </div>
                     </div>
@@ -768,16 +778,28 @@
                     ? `<div class="report-meta-email">Rückmelde-E-Mail des Melders: <strong style="color:var(--text-main);">${safeEmail}</strong></div>`
                     : '';
 
-                const editBtnHtml = r.verifiziert
-                    ? `<button class="btn-switch" onclick="openTechReportModal(${r.id})">Bearbeiten</button>`
-                    : `<button class="btn-green" onclick="openTechReportModal(${r.id})">Verifizieren &amp; Prio setzen</button>`;
+                const canManageRep = hasPerm('manage_reports');
 
-                const mergeBtnHtml = allReportsOnPinInTab.length >= 2
+                const editBtnHtml = canManageRep
+                    ? (r.verifiziert
+                        ? `<button class="btn-switch" onclick="openTechReportModal(${r.id})">Bearbeiten</button>`
+                        : `<button class="btn-green" onclick="openTechReportModal(${r.id})">Verifizieren &amp; Prio setzen</button>`)
+                    : '';
+
+                const mergeBtnHtml = (canManageRep && allReportsOnPinInTab.length >= 2)
                     ? `<button class="btn-switch" onclick="openMergeReportModal(${r.id})" title="Diese Meldung an eine andere anhängen">An andere anhängen</button>`
                     : '';
 
-                const resolveBtnHtml = r.status === 'offen'
+                const partsBtnHtml = (hasPerm('manage_parts') && r.status === 'offen')
+                    ? `<button class="btn-yellow" onclick="window.location.href='tech-parts?add=1&pin=${currentPinball.id}&report=${r.id}'">+ Ersatzteil</button>`
+                    : '';
+
+                const resolveBtnHtml = (canManageRep && r.status === 'offen')
                     ? `<button class="btn-green" onclick="openResolveModal(${r.id})">Als behoben markieren</button>`
+                    : '';
+
+                const deleteBtnHtml = canManageRep
+                    ? `<button class="btn-report" onclick="deleteReport(${r.id}, '${safeFoto}', '${safeSolFoto}')">Löschen</button>`
                     : '';
 
                 const cardExtraClass = r.status === 'behoben'
@@ -811,8 +833,9 @@
                             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                 ${editBtnHtml}
                                 ${mergeBtnHtml}
+                                ${partsBtnHtml}
                                 ${resolveBtnHtml}
-                                <button class="btn-report" onclick="deleteReport(${r.id}, '${safeFoto}', '${safeSolFoto}')">Löschen</button>
+                                ${deleteBtnHtml}
                             </div>
                         </div>
                     </div>

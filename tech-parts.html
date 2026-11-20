@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&Play - Ersatzteile & Shop-Katalog</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="navigateBackTo('techniker')" title="Zurück zum Techniker-Dashboard">←</button>
+                <h2 style="margin: 0;">Ersatzteile &amp; Shop-Links</h2>
+            </div>
+            <div class="detail-header-actions">
+                <button id="btn-new-order" class="btn-context-add" onclick="openOrderModal(null)">+ Teil anfordern</button>
+                <button id="btn-new-catalog" class="btn-yellow" onclick="openCatalogModal(null)">+ Teil in Shop-Katalog</button>
+            </div>
+        </div>
+
+        <div class="report-mode-tabs">
+            <button id="ptab-benoetigt" class="report-tab-btn" onclick="switchPartsTab('benoetigt')">
+                Benötigt (<span id="pcnt-benoetigt">0</span>)
+            </button>
+            <button id="ptab-bestellt" class="report-tab-btn" onclick="switchPartsTab('bestellt')">
+                Bestellt (<span id="pcnt-bestellt">0</span>)
+            </button>
+            <button id="ptab-geliefert" class="report-tab-btn" onclick="switchPartsTab('geliefert')">
+                Geliefert / Historie (<span id="pcnt-geliefert">0</span>)
+            </button>
+            <button id="ptab-katalog" class="report-tab-btn" onclick="switchPartsTab('katalog')">
+                Shop-Katalog (<span id="pcnt-katalog">0</span>)
+            </button>
+        </div>
+
+        <div class="report-controls" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <input type="text" id="parts-search" placeholder="Suche nach Teil, Shop oder Artikelnummer..." oninput="renderPartsView()" style="flex:1; min-width:210px; margin:0; padding:10px; background:var(--surface-input); color:var(--text-main); border:1px solid var(--border-light); border-radius:6px;">
+            <select id="parts-pin-filter" class="bold-sort-select" style="min-width:200px; margin:0;" onchange="renderPartsView()"></select>
+        </div>
+
+        <div id="parts-list-container"></div>
+    </div>
+
+    <!-- MODAL 1: ERSATZTEIL-BESTELLUNG ANLEGEN / BEARBEITEN -->
+    <div id="order-modal" class="modal-overlay hidden" onclick="if(event.target.id==='order-modal') closeOrderModal()">
+        <div class="modal-box" style="max-width: 600px;">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 id="order-modal-title" style="margin: 0;">Benötigtes Ersatzteil eintragen</h3>
+                <button class="btn-switch" onclick="closeOrderModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <label><strong>Schnellauswahl aus dem Shop-Katalog (Optional)</strong></label>
+                <select id="ord-catalog-pick" onchange="applyCatalogSelection()"></select>
+
+                <label><strong>Flipper (oder Allgemein / Lager)</strong></label>
+                <select id="ord-pinball" onchange="updateOrderReportSelect()"></select>
+
+                <label><strong>Verknüpfte Defekt-Meldung (Optional)</strong></label>
+                <select id="ord-report"></select>
+
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <div style="flex:3; min-width:200px;">
+                        <label><strong>Bezeichnung des Teils *</strong></label>
+                        <input type="text" id="ord-name" placeholder="z.B. Coilstop Williams A-12390 / Spulenhülse 56mm">
+                    </div>
+                    <div style="flex:1; min-width:90px;">
+                        <label><strong>Menge</strong></label>
+                        <input type="number" id="ord-qty" value="1" min="1">
+                    </div>
+                </div>
+
+                <label><strong>Shop-Name (Optional)</strong></label>
+                <input type="text" id="ord-shop-name" list="pinball-shops-list" placeholder="z.B. Pinball Center, PinWitch, PU-Parts, Multiball...">
+
+                <label><strong>Direkter Shop-Link / URL zum Artikel (Optional)</strong></label>
+                <input type="url" id="ord-shop-url" placeholder="https://...">
+
+                <label><strong>Notiz / Artikelnummer (Optional)</strong></label>
+                <textarea id="ord-notes" rows="2" placeholder="z.B. für linken Flipperfinger, gleich 2 auf Reserve..."></textarea>
+
+                <div id="ord-save-catalog-wrap" style="margin-bottom: 14px;">
+                    <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main);">
+                        <input type="checkbox" id="ord-also-catalog" style="width:auto; margin:0;">
+                        Teil &amp; Shop-URL gleichzeitig dauerhaft im Shop-Katalog speichern
+                    </label>
+                </div>
+
+                <button id="ord-save-btn" class="btn-green" style="width:100%; padding:14px;" onclick="saveOrderModal()">Speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: SHOP-KATALOG-EINTRAG ANLEGEN / BEARBEITEN -->
+    <div id="catalog-modal" class="modal-overlay hidden" onclick="if(event.target.id==='catalog-modal') closeCatalogModal()">
+        <div class="modal-box" style="max-width: 580px;">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 id="cat-modal-title" style="margin: 0;">Shop-Katalog Eintrag</h3>
+                <button class="btn-switch" onclick="closeCatalogModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <label><strong>Teilename *</strong></label>
+                <input type="text" id="cat-name" placeholder="z.B. Coilstop WPC / Stern (A-12390)">
+
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:160px;">
+                        <label><strong>Kategorie</strong></label>
+                        <input type="text" id="cat-category" list="parts-categories-list" placeholder="z.B. Mechanik, Spulen, LEDs, Gummis">
+                    </div>
+                    <div style="flex:1; min-width:160px;">
+                        <label><strong>Artikelnummer (Optional)</strong></label>
+                        <input type="text" id="cat-partno" placeholder="z.B. 515-6308-01">
+                    </div>
+                </div>
+
+                <label><strong>Bevorzugter Shop *</strong></label>
+                <input type="text" id="cat-shop-name" list="pinball-shops-list" placeholder="z.B. PinWitch, PU-Parts, Pinball Center, Multiball">
+
+                <label><strong>Direkte Produkt-URL *</strong></label>
+                <input type="url" id="cat-shop-url" placeholder="https://...">
+
+                <label><strong>Hinweise / Passend für (Optional)</strong></label>
+                <textarea id="cat-notes" rows="2" placeholder="z.B. Passend für alle WPC-95 Flippermechaniken"></textarea>
+
+                <button id="cat-save-btn" class="btn-green" style="width:100%; padding:14px;" onclick="saveCatalogModal()">Im Shop-Katalog speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <datalist id="pinball-shops-list">
+        <option value="Pinball Center"></option>
+        <option value="PinWitch"></option>
+        <option value="PU-Parts"></option>
+        <option value="Multiball"></option>
+        <option value="pinball-parts.shop"></option>
+        <option value="Freddy's Pinball Paradise"></option>
+        <option value="Best of Pinball"></option>
+    </datalist>
+
+    <datalist id="parts-categories-list">
+        <option value="Coilstops & Mechanik"></option>
+        <option value="Spulen & Hülsen"></option>
+        <option value="Gummis & Posts"></option>
+        <option value="LEDs & Beleuchtung"></option>
+        <option value="Elektronik & Sicherungen"></option>
+        <option value="Schalter & Optos"></option>
+        <option value="Reinigung & Politur"></option>
+    </datalist>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+    <script>
+        let currentPartsTab = 'benoetigt';
+        let editingOrderId = null;
+        let editingCatalogId = null;
+
+        function escHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function normalizeUrl(raw) {
+            const t = String(raw || '').trim();
+            if (!t) return '';
+            if (t.startsWith('http://') || t.startsWith('https://')) return t;
+            return 'https://' + t;
+        }
+
+        function getPinNameOrGeneral(pinId) {
+            if (!pinId) return 'Allgemein / Lager';
+            const p = pinballs.find(x => x.id === pinId);
+            return p ? p.name : `Flipper #${pinId}`;
+        }
+
+        function populatePartsPinFilter() {
+            const sel = document.getElementById('parts-pin-filter');
+            const prev = sel.value || 'all';
+            sel.innerHTML = '<option value="all">Alle Flipper &amp; Lager</option><option value="none">Nur Allgemein / Lager</option>';
+            [...pinballs].sort((a, b) => a.name.localeCompare(b.name, 'de')).forEach(p => {
+                const o = document.createElement('option');
+                o.value = p.id; o.textContent = p.name;
+                sel.appendChild(o);
+            });
+            sel.value = prev;
+        }
+
+        function switchPartsTab(tab) {
+            currentPartsTab = tab;
+            renderPartsView();
+        }
+
+        function renderPartsView() {
+            const canEdit = hasPerm('manage_parts');
+            document.getElementById('btn-new-order').classList.toggle('hidden', !canEdit);
+            document.getElementById('btn-new-catalog').classList.toggle('hidden', !canEdit);
+
+            document.getElementById('pcnt-benoetigt').innerText = partsOrdersDB.filter(x => x.status === 'benoetigt').length;
+            document.getElementById('pcnt-bestellt').innerText = partsOrdersDB.filter(x => x.status === 'bestellt').length;
+            document.getElementById('pcnt-geliefert').innerText = partsOrdersDB.filter(x => x.status === 'geliefert').length;
+            document.getElementById('pcnt-katalog').innerText = partsCatalogDB.length;
+
+            ['benoetigt', 'bestellt', 'geliefert', 'katalog'].forEach(t => {
+                document.getElementById(`ptab-${t}`).className = 'report-tab-btn';
+            });
+            if (currentPartsTab === 'benoetigt') document.getElementById('ptab-benoetigt').classList.add('active-open');
+            else if (currentPartsTab === 'bestellt') document.getElementById('ptab-bestellt').classList.add('active-highscore');
+            else if (currentPartsTab === 'geliefert') document.getElementById('ptab-geliefert').classList.add('active-resolved');
+            else document.getElementById('ptab-katalog').classList.add('active-open');
+
+            const pinFilterEl = document.getElementById('parts-pin-filter');
+            pinFilterEl.style.display = currentPartsTab === 'katalog' ? 'none' : 'inline-block';
+
+            const query = (document.getElementById('parts-search').value || '').trim().toLowerCase();
+            const container = document.getElementById('parts-list-container');
+
+            if (currentPartsTab === 'katalog') {
+                const list = partsCatalogDB.filter(c =>
+                    !query ||
+                    c.partName.toLowerCase().includes(query) ||
+                    c.shopName.toLowerCase().includes(query) ||
+                    c.category.toLowerCase().includes(query) ||
+                    c.partNumber.toLowerCase().includes(query)
+                );
+
+                if (list.length === 0) {
+                    container.innerHTML = '<p style="color:var(--text-muted); padding:15px;"><i>Noch keine Einträge im Shop-Katalog. Lege oben über „+ Teil in Shop-Katalog“ deine häufig genutzten Shop-Links (z.B. Coilstops) an.</i></p>';
+                    return;
+                }
+
+                container.innerHTML = list.map(c => {
+                    const url = normalizeUrl(c.shopUrl);
+                    return `
+                        <div class="report-comment" style="border-left: 5px solid var(--primary-blue);">
+                            <div class="report-header-bar">
+                                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                    <strong style="font-size:16px; color:var(--gold-light);">${escHtml(c.partName)}</strong>
+                                    <span class="perm-tag-pill">${escHtml(c.category)}</span>
+                                    ${c.partNumber ? `<span class="perm-tag-pill">Art.-Nr.: ${escHtml(c.partNumber)}</span>` : ''}
+                                </div>
+                                <span style="font-size:13px; color:var(--text-muted);">Shop: <strong style="color:var(--text-main);">${escHtml(c.shopName || '-')}</strong></span>
+                            </div>
+                            ${c.notes ? `<div style="font-size:14px; color:var(--text-muted); margin-bottom:10px;">${escHtml(c.notes)}</div>` : ''}
+                            <div class="report-actions">
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🔗 Im Shop öffnen (${escHtml(c.shopName || 'Link')})</a>` : ''}
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    ${canEdit ? `<button class="btn-green" onclick="orderDirectlyFromCatalog(${c.id})">+ Auf Bestellliste</button>` : ''}
+                                    ${canEdit ? `<button class="btn-switch" onclick="openCatalogModal(${c.id})">Bearbeiten</button>` : ''}
+                                    ${canEdit ? `<button class="btn-report" onclick="deleteCatalogItem(${c.id})">Löschen</button>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                return;
+            }
+
+            const pinVal = pinFilterEl.value;
+            const orders = partsOrdersDB.filter(o => o.status === currentPartsTab).filter(o => {
+                if (pinVal === 'none' && o.pinballId !== null) return false;
+                if (pinVal !== 'all' && pinVal !== 'none' && String(o.pinballId) !== String(pinVal)) return false;
+                if (!query) return true;
+                return (
+                    o.partName.toLowerCase().includes(query) ||
+                    o.shopName.toLowerCase().includes(query) ||
+                    o.notes.toLowerCase().includes(query) ||
+                    getPinNameOrGeneral(o.pinballId).toLowerCase().includes(query)
+                );
+            });
+
+            if (orders.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted); padding:15px;"><i>Keine Ersatzteile in dieser Liste vorhanden.</i></p>';
+                return;
+            }
+
+            container.innerHTML = orders.map(o => {
+                const url = normalizeUrl(o.shopUrl);
+                const linkedRep = o.reportId ? reportsDB.find(r => r.id === o.reportId) : null;
+                const statusBadge = `<span class="badge-part-status part-status-${o.status}">${o.status}</span>`;
+                const pinBadge = o.pinballId
+                    ? `<span class="flipper-origin-badge" onclick="saveCurrentScrollPos(); window.location.href='tech-detail?id=${o.pinballId}&from=tech-parts'">📍 ${escHtml(getPinNameOrGeneral(o.pinballId))}</span>`
+                    : `<span class="perm-tag-pill">📦 Allgemein / Lager</span>`;
+
+                let statusBtns = '';
+                if (canEdit) {
+                    if (o.status === 'benoetigt') {
+                        statusBtns += `<button class="btn-yellow" onclick="updateOrderStatus(${o.id}, 'bestellt')">Als bestellt markieren</button>`;
+                    } else if (o.status === 'bestellt') {
+                        statusBtns += `<button class="btn-green" onclick="updateOrderStatus(${o.id}, 'geliefert')">✓ Als geliefert markieren</button>`;
+                        statusBtns += `<button class="btn-switch" onclick="updateOrderStatus(${o.id}, 'benoetigt')">Zurück auf Benötigt</button>`;
+                    } else {
+                        statusBtns += `<button class="btn-switch" onclick="updateOrderStatus(${o.id}, 'benoetigt')">Erneut anfordern</button>`;
+                    }
+                    statusBtns += `<button class="btn-switch" onclick="openOrderModal(${o.id})">Bearbeiten</button>`;
+                    statusBtns += `<button class="btn-report" onclick="deleteOrder(${o.id})">Löschen</button>`;
+                }
+
+                const borderCol = o.status === 'benoetigt' ? 'var(--status-red)' : (o.status === 'bestellt' ? 'var(--accent-yellow)' : 'var(--status-green)');
+
+                return `
+                    <div class="report-comment" style="border-left: 5px solid ${borderCol};">
+                        <div class="report-header-bar">
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                ${pinBadge}
+                                ${statusBadge}
+                                <strong style="font-size:17px; color:var(--text-main);">${o.quantity}× ${escHtml(o.partName)}</strong>
+                            </div>
+                            <span style="font-size:13px; color:var(--text-muted);">Angelegt am ${formatDateTime(o.date)}${o.createdBy ? ` (${escHtml(o.createdBy)})` : ''}</span>
+                        </div>
+                        ${linkedRep ? `<div class="report-cause-box"><strong>Gehört zu Defekt-Meldung:</strong> ${escHtml(linkedRep.text)}</div>` : ''}
+                        ${o.notes ? `<div class="report-body-text" style="font-size:14px; margin-bottom:10px;">${escHtml(o.notes)}</div>` : ''}
+                        <div class="report-actions">
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🛒 Im Shop bestellen${o.shopName ? ` (${escHtml(o.shopName)})` : ''}</a>` : (o.shopName ? `<span class="perm-tag-pill">Shop: ${escHtml(o.shopName)}</span>` : '')}
+                            </div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">${statusBtns}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- ORDER MODAL ---
+        function openOrderModal(orderId = null, presetPinId = null, presetReportId = null, presetCatalogId = null) {
+            editingOrderId = orderId;
+            const catSel = document.getElementById('ord-catalog-pick');
+            catSel.innerHTML = '<option value="">— Manuell eingeben oder aus Katalog übernehmen —</option>';
+            partsCatalogDB.forEach(c => {
+                const o = document.createElement('option');
+                o.value = c.id;
+                o.textContent = `${c.partName}${c.shopName ? ` (${c.shopName})` : ''}`;
+                catSel.appendChild(o);
+            });
+
+            const pinSel = document.getElementById('ord-pinball');
+            pinSel.innerHTML = '<option value="">Allgemein / Lager (Kein bestimmter Flipper)</option>';
+            [...pinballs].sort((a, b) => a.name.localeCompare(b.name, 'de')).forEach(p => {
+                const o = document.createElement('option');
+                o.value = p.id; o.textContent = p.name;
+                pinSel.appendChild(o);
+            });
+
+            document.getElementById('ord-also-catalog').checked = false;
+            document.getElementById('ord-save-catalog-wrap').style.display = orderId ? 'none' : 'block';
+
+            if (orderId === null) {
+                document.getElementById('order-modal-title').innerText = 'Benötigtes Ersatzteil eintragen';
+                pinSel.value = presetPinId ? String(presetPinId) : '';
+                updateOrderReportSelect(presetReportId);
+                document.getElementById('ord-name').value = '';
+                document.getElementById('ord-qty').value = '1';
+                document.getElementById('ord-shop-name').value = '';
+                document.getElementById('ord-shop-url').value = '';
+                document.getElementById('ord-notes').value = '';
+                if (presetCatalogId) {
+                    catSel.value = String(presetCatalogId);
+                    applyCatalogSelection();
+                }
+            } else {
+                const t = partsOrdersDB.find(x => x.id === orderId);
+                if (!t) return;
+                document.getElementById('order-modal-title').innerText = 'Ersatzteil bearbeiten';
+                pinSel.value = t.pinballId ? String(t.pinballId) : '';
+                updateOrderReportSelect(t.reportId);
+                document.getElementById('ord-name').value = t.partName;
+                document.getElementById('ord-qty').value = String(t.quantity);
+                document.getElementById('ord-shop-name').value = t.shopName;
+                document.getElementById('ord-shop-url').value = t.shopUrl;
+                document.getElementById('ord-notes').value = t.notes;
+            }
+            document.getElementById('order-modal').classList.remove('hidden');
+        }
+
+        function orderDirectlyFromCatalog(catId) {
+            openOrderModal(null, null, null, catId);
+        }
+
+        function applyCatalogSelection() {
+            const catId = Number(document.getElementById('ord-catalog-pick').value);
+            const item = partsCatalogDB.find(c => c.id === catId);
+            if (!item) return;
+            document.getElementById('ord-name').value = item.partName;
+            document.getElementById('ord-shop-name').value = item.shopName;
+            document.getElementById('ord-shop-url').value = item.shopUrl;
+            if (!document.getElementById('ord-notes').value.trim()) {
+                document.getElementById('ord-notes').value = item.partNumber ? `Art.-Nr.: ${item.partNumber}` : item.notes;
+            }
+        }
+
+        function updateOrderReportSelect(presetReportId = null) {
+            const pinId = Number(document.getElementById('ord-pinball').value);
+            const repSel = document.getElementById('ord-report');
+            repSel.innerHTML = '<option value="">Keine bestimmte Meldung verknüpft</option>';
+            if (!pinId) return;
+            reportsDB.filter(r => r.pinballId === pinId && r.status === 'offen').forEach(r => {
+                const o = document.createElement('option');
+                o.value = r.id;
+                o.textContent = `#${r.id}: ${r.text.substring(0, 75)}`;
+                repSel.appendChild(o);
+            });
+            if (presetReportId) repSel.value = String(presetReportId);
+        }
+
+        function closeOrderModal() { document.getElementById('order-modal').classList.add('hidden'); editingOrderId = null; }
+
+        async function saveOrderModal() {
+            const partName = document.getElementById('ord-name').value.trim();
+            if (!partName) { showActionToast("Bitte gib die Bezeichnung des Teils ein!", "error"); return; }
+
+            const pinRaw = document.getElementById('ord-pinball').value;
+            const repRaw = document.getElementById('ord-report').value;
+            const qty = Math.max(1, parseInt(document.getElementById('ord-qty').value, 10) || 1);
+            const shopName = document.getElementById('ord-shop-name').value.trim();
+            const shopUrl = document.getElementById('ord-shop-url').value.trim();
+            const notes = document.getElementById('ord-notes').value.trim();
+            const alsoCat = document.getElementById('ord-also-catalog').checked;
+
+            const btn = document.getElementById('ord-save-btn');
+            btn.disabled = true; btn.classList.add('btn-busy');
+            try {
+                const payload = {
+                    flipper_id: pinRaw ? Number(pinRaw) : null,
+                    report_id: repRaw ? Number(repRaw) : null,
+                    part_name: partName,
+                    quantity: qty,
+                    shop_name: shopName,
+                    shop_url: shopUrl,
+                    notes: notes
+                };
+
+                if (editingOrderId === null) {
+                    payload.status = 'benoetigt';
+                    payload.created_by = currentUserAccount?.display_name || 'Techniker';
+                    const { error } = await db.from('parts_orders').insert([payload]);
+                    if (error) throw error;
+
+                    if (alsoCat) {
+                        await db.from('parts_catalog').insert([{
+                            part_name: partName, category: 'Allgemein',
+                            shop_name: shopName, shop_url: shopUrl, notes: notes
+                        }]);
+                    }
+                } else {
+                    const { error } = await db.from('parts_orders').update(payload).eq('id', editingOrderId);
+                    if (error) throw error;
+                }
+
+                closeOrderModal();
+                showActionToast("✓ Ersatzteil gespeichert!", "success");
+                await loadAllDatabaseData();
+                renderSharedHeader();
+                renderPartsView();
+            } catch (err) {
+                showActionToast("Fehler: " + err.message, "error");
+            } finally {
+                btn.disabled = false; btn.classList.remove('btn-busy');
+            }
+        }
+
+        async function updateOrderStatus(orderId, newStatus) {
+            const payload = { status: newStatus };
+            if (newStatus === 'bestellt') payload.ordered_at = new Date().toISOString();
+            if (newStatus === 'geliefert') payload.delivered_at = new Date().toISOString();
+            const { error } = await db.from('parts_orders').update(payload).eq('id', orderId);
+            if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
+            showActionToast(`✓ Status auf „${newStatus}“ gesetzt!`, "success");
+            await loadAllDatabaseData();
+            renderSharedHeader();
+            renderPartsView();
+        }
+
+        async function deleteOrder(orderId) {
+            if (!confirm("Diesen Ersatzteil-Eintrag wirklich löschen?")) return;
+            const { error } = await db.from('parts_orders').delete().eq('id', orderId);
+            if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
+            showActionToast("Eintrag gelöscht.", "info");
+            await loadAllDatabaseData();
+            renderSharedHeader();
+            renderPartsView();
+        }
+
+        // --- CATALOG MODAL ---
+        function openCatalogModal(catId = null) {
+            editingCatalogId = catId;
+            if (catId === null) {
+                document.getElementById('cat-modal-title').innerText = 'Neues Teil im Shop-Katalog';
+                document.getElementById('cat-name').value = '';
+                document.getElementById('cat-category').value = 'Coilstops & Mechanik';
+                document.getElementById('cat-partno').value = '';
+                document.getElementById('cat-shop-name').value = '';
+                document.getElementById('cat-shop-url').value = '';
+                document.getElementById('cat-notes').value = '';
+            } else {
+                const c = partsCatalogDB.find(x => x.id === catId);
+                if (!c) return;
+                document.getElementById('cat-modal-title').innerText = 'Shop-Katalog bearbeiten';
+                document.getElementById('cat-name').value = c.partName;
+                document.getElementById('cat-category').value = c.category;
+                document.getElementById('cat-partno').value = c.partNumber;
+                document.getElementById('cat-shop-name').value = c.shopName;
+                document.getElementById('cat-shop-url').value = c.shopUrl;
+                document.getElementById('cat-notes').value = c.notes;
+            }
+            document.getElementById('catalog-modal').classList.remove('hidden');
+        }
+        function closeCatalogModal() { document.getElementById('catalog-modal').classList.add('hidden'); editingCatalogId = null; }
+
+        async function saveCatalogModal() {
+            const partName = document.getElementById('cat-name').value.trim();
+            const shopName = document.getElementById('cat-shop-name').value.trim();
+            const shopUrl = document.getElementById('cat-shop-url').value.trim();
+            if (!partName || !shopUrl) { showActionToast("Bitte Teilename und Shop-URL angeben!", "error"); return; }
+
+            const payload = {
+                part_name: partName,
+                category: document.getElementById('cat-category').value.trim() || 'Allgemein',
+                part_number: document.getElementById('cat-partno').value.trim(),
+                shop_name: shopName,
+                shop_url: shopUrl,
+                notes: document.getElementById('cat-notes').value.trim()
+            };
+
+            const btn = document.getElementById('cat-save-btn');
+            btn.disabled = true; btn.classList.add('btn-busy');
+            try {
+                const res = editingCatalogId === null
+                    ? await db.from('parts_catalog').insert([payload])
+                    : await db.from('parts_catalog').update(payload).eq('id', editingCatalogId);
+                if (res.error) throw res.error;
+                closeCatalogModal();
+                showActionToast("✓ Im Shop-Katalog gespeichert!", "success");
+                await loadAllDatabaseData();
+                renderPartsView();
+            } catch (err) {
+                showActionToast("Fehler: " + err.message, "error");
+            } finally {
+                btn.disabled = false; btn.classList.remove('btn-busy');
+            }
+        }
+
+        async function deleteCatalogItem(id) {
+            if (!confirm("Dieses Teil aus dem Shop-Katalog löschen?")) return;
+            const { error } = await db.from('parts_catalog').delete().eq('id', id);
+            if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
+            showActionToast("Aus Katalog entfernt.", "info");
+            await loadAllDatabaseData();
+            renderPartsView();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+
+            await initSharedApp(() => {
+                if (!hasPerm('manage_parts') && !hasPerm('view_reports')) { window.location.href = './'; return; }
+                renderPartsView();
+            });
+
+            if (!isLoggedIn) { window.location.href = './#login'; return; }
+            if (!hasPerm('manage_parts') && !hasPerm('view_reports')) {
+                showActionToast("Keine Berechtigung für Ersatzteile.", "error");
+                window.location.href = './';
+                return;
+            }
+            if (!isTechMode && hasAnyAdminAreaAccess()) {
+                isTechMode = true; localStorage.setItem('pinplay_tech_mode', 'true'); renderSharedHeader();
+            }
+
+            populatePartsPinFilter();
+            renderPartsView();
+
+            if (params.get('add') === '1' && hasPerm('manage_parts')) {
+                openOrderModal(null, params.get('pin'), params.get('report'));
+                window.history.replaceState({}, '', 'tech-parts');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&Play - Account-Verwaltung</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="navigateBackTo('techniker')" title="Zurück zum Techniker-Dashboard">←</button>
+                <h2 style="margin: 0;">Accounts &amp; Berechtigungen (<span id="acc-count">0</span>)</h2>
+            </div>
+            <div class="detail-header-actions">
+                <button class="btn-context-add" onclick="openAccountModal(null)">+ Neuen Account erstellen</button>
+            </div>
+        </div>
+
+        <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 20px; line-height: 1.5;">
+            Jeder eingeloggte Account benötigt automatisch <strong>kein Tages-QR-Code-Ticket</strong> mehr und darf Flipper anschalten, Highscores, Defekte und Feedback einreichen. Über die Checkboxen unten vergibst du jedem Account gezielt zusätzliche Rechte.
+        </p>
+
+        <div id="accounts-list-container"></div>
+    </div>
+
+    <!-- MODAL: ACCOUNT ERSTELLEN / BEARBEITEN -->
+    <div id="account-modal" class="modal-overlay hidden" onclick="if(event.target.id==='account-modal') closeAccountModal()">
+        <div class="modal-box" style="max-width: 660px;">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 id="acc-modal-title" style="margin: 0;">Neuen Account erstellen</h3>
+                <button class="btn-switch" onclick="closeAccountModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:200px;">
+                        <label><strong>Anzeigename *</strong></label>
+                        <input type="text" id="acc-name" placeholder="z.B. Max / Hallenaufsicht">
+                    </div>
+                    <div style="flex:1; min-width:180px;">
+                        <label><strong>Rollen-Bezeichnung</strong></label>
+                        <input type="text" id="acc-role" placeholder="z.B. Mitglied, Aufsicht, Techniker">
+                    </div>
+                </div>
+
+                <label><strong>Login-Kennung (E-Mail-Format) *</strong></label>
+                <input type="email" id="acc-email" placeholder="z.B. max@pinplay.lokal">
+
+                <label><strong id="acc-pwd-label">Passwort (mind. 6 Zeichen) *</strong></label>
+                <input type="password" id="acc-pwd" placeholder="Passwort eingeben...">
+
+                <div style="margin-bottom: 10px;">
+                    <div style="font-size: 13px; font-weight: bold; color: var(--gold-light); margin-bottom: 6px;">Schnell-Vorlagen für Berechtigungen:</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="btn-switch" onclick="applyRolePreset('member')">Stammspieler (Nur ohne QR)</button>
+                        <button type="button" class="btn-switch" onclick="applyRolePreset('helper')">Aufsicht / Helfer</button>
+                        <button type="button" class="btn-switch" onclick="applyRolePreset('tech')">Techniker</button>
+                        <button type="button" class="btn-yellow" onclick="applyRolePreset('admin')">Voll-Admin</button>
+                    </div>
+                </div>
+
+                <div style="font-size: 13px; font-weight: bold; color: var(--gold-light); margin: 14px 0 8px 0;">Einzelberechtigungen:</div>
+                <div class="perm-grid">
+                    <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-power-off">
+                        <div><strong>Flipper Power / Status</strong><br><span style="font-size:12px;color:var(--text-muted);">Darf Flipper ausschalten &amp; Alle AN/AUS nutzen</span></div>
+                    </label>
+                    <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-view-reports">
+                        <div><strong>Defekte ansehen</strong><br><span style="font-size:12px;color:var(--text-muted);">Sieht Meldungen &amp; News-Feed (lesend)</span></div>
+                    </label>
+                    <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-manage-reports">
+                        <div><strong>Defekte bearbeiten</strong><br><span style="font-size:12px;color:var(--text-muted);">Verifizieren, Prio setzen, Mergen, Behoben, Status</span></div>
+                    </label>
+                    <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-verify-hs">
+                        <div><strong>Highscores prüfen</strong><br><span style="font-size:12px;color:var(--text-muted);">Beweisfotos prüfen, verifizieren &amp; löschen</span></div>
+                    </label>
+                    <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-manage-parts">
+                        <div><strong>Ersatzteile &amp; Shops</strong><br><span style="font-size:12px;color:var(--text-muted);">Teile anfordern, bestellen &amp; Katalog pflegen</span></div>
+                    </label>
+                    <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-view-feedback">
+                        <div><strong>Spieler-Feedback</strong><br><span style="font-size:12px;color:var(--text-muted);">Eingegangenes Feedback lesen &amp; löschen</span></div>
+                    </label>
+                    <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-manage-players-qr">
+                        <div><strong>Kürzel, QR &amp; TV</strong><br><span style="font-size:12px;color:var(--text-muted);">Spieler-Profile &amp; Tages-QR-Code verwalten</span></div>
+                    </label>
+                    <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-manage-accounts">
+                        <div><strong>Account-Admin</strong><br><span style="font-size:12px;color:var(--text-muted);">Darf neue Accounts erstellen &amp; Rechte ändern</span></div>
+                    </label>
+                </div>
+
+                <button id="acc-save-btn" class="btn-green" style="width:100%; padding:14px;" onclick="saveAccountModal()">Account speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+    <script>
+        let editingUserId = null;
+
+        const PERM_LABELS = [
+            ['perm_power_off', '⚡ Power AUS/Massen'],
+            ['perm_view_reports', '👁️ Defekte lesen'],
+            ['perm_manage_reports', '🛠️ Defekte bearbeiten'],
+            ['perm_verify_highscores', '🏆 Highscores prüfen'],
+            ['perm_manage_parts', '🔧 Ersatzteile'],
+            ['perm_view_feedback', '💬 Feedback'],
+            ['perm_manage_players_qr', '📱 Kürzel & QR'],
+            ['perm_manage_accounts', '🔑 Account-Admin']
+        ];
+
+        function escHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function renderAccountsList() {
+            const container = document.getElementById('accounts-list-container');
+            document.getElementById('acc-count').innerText = accountsDB.length;
+
+            if (accountsDB.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted);"><i>Keine Accounts gefunden.</i></p>';
+                return;
+            }
+
+            container.innerHTML = accountsDB.map(acc => {
+                const isSelf = currentUserAccount && acc.user_id === currentUserAccount.user_id;
+                const activeTags = PERM_LABELS.filter(([k]) => acc[k] === true).map(([, label]) => `<span class="perm-tag-pill">${label}</span>`);
+                const permsHtml = activeTags.length > 0
+                    ? activeTags.join('')
+                    : '<span class="perm-tag-pill" style="color:var(--gold-light);">🎫 Basis-Account (Kein Tages-QR-Code nötig)</span>';
+
+                return `
+                    <div class="report-comment" style="border-left: 5px solid ${acc.perm_manage_accounts ? 'var(--gold-mid)' : 'var(--primary-blue)'};">
+                        <div class="report-header-bar">
+                            <div>
+                                <strong style="font-size:17px; color:var(--gold-light);">${escHtml(acc.display_name)}</strong>
+                                <span class="badge-verified" style="margin-left:8px;">${escHtml(acc.role_label)}</span>
+                                ${isSelf ? '<span class="badge-merged" style="margin-left:6px;">Dein Account</span>' : ''}
+                                <div style="font-size:13px; color:var(--text-muted); margin-top:4px;">Login: ${escHtml(acc.email)}</div>
+                            </div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <button class="btn-switch" onclick="openAccountModal('${acc.user_id}')">Rechte / Passwort</button>
+                                ${!isSelf ? `<button class="btn-report" onclick="deleteAccount('${acc.user_id}', '${escHtml(acc.display_name).replace(/'/g, "\\'")}')">Löschen</button>` : ''}
+                            </div>
+                        </div>
+                        <div style="margin-top:6px;">${permsHtml}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function setPermCheckboxes(p) {
+            document.getElementById('p-power-off').checked = !!p.perm_power_off;
+            document.getElementById('p-view-reports').checked = !!p.perm_view_reports;
+            document.getElementById('p-manage-reports').checked = !!p.perm_manage_reports;
+            document.getElementById('p-verify-hs').checked = !!p.perm_verify_highscores;
+            document.getElementById('p-manage-parts').checked = !!p.perm_manage_parts;
+            document.getElementById('p-view-feedback').checked = !!p.perm_view_feedback;
+            document.getElementById('p-manage-players-qr').checked = !!p.perm_manage_players_qr;
+            document.getElementById('p-manage-accounts').checked = !!p.perm_manage_accounts;
+        }
+
+        function applyRolePreset(preset) {
+            if (preset === 'member') {
+                document.getElementById('acc-role').value = 'Stammspieler';
+                setPermCheckboxes({});
+            } else if (preset === 'helper') {
+                document.getElementById('acc-role').value = 'Aufsicht / Helfer';
+                setPermCheckboxes({ perm_power_off: true, perm_view_reports: true, perm_verify_highscores: true });
+            } else if (preset === 'tech') {
+                document.getElementById('acc-role').value = 'Techniker';
+                setPermCheckboxes({
+                    perm_power_off: true, perm_view_reports: true, perm_manage_reports: true,
+                    perm_verify_highscores: true, perm_manage_parts: true, perm_view_feedback: true,
+                    perm_manage_players_qr: true, perm_manage_accounts: false
+                });
+            } else if (preset === 'admin') {
+                document.getElementById('acc-role').value = 'Admin / Techniker';
+                setPermCheckboxes({
+                    perm_power_off: true, perm_view_reports: true, perm_manage_reports: true,
+                    perm_verify_highscores: true, perm_manage_parts: true, perm_view_feedback: true,
+                    perm_manage_players_qr: true, perm_manage_accounts: true
+                });
+            }
+        }
+
+        function openAccountModal(userId = null) {
+            editingUserId = userId;
+            const emailEl = document.getElementById('acc-email');
+            const pwdEl = document.getElementById('acc-pwd');
+            pwdEl.value = '';
+
+            if (!userId) {
+                document.getElementById('acc-modal-title').innerText = 'Neuen Account erstellen';
+                document.getElementById('acc-name').value = '';
+                document.getElementById('acc-role').value = 'Stammspieler';
+                emailEl.value = '';
+                emailEl.disabled = false;
+                document.getElementById('acc-pwd-label').innerText = 'Passwort (mind. 6 Zeichen) *';
+                pwdEl.placeholder = 'Passwort festlegen...';
+                setPermCheckboxes({});
+            } else {
+                const acc = accountsDB.find(a => a.user_id === userId);
+                if (!acc) return;
+                document.getElementById('acc-modal-title').innerText = `Account bearbeiten: ${acc.display_name}`;
+                document.getElementById('acc-name').value = acc.display_name;
+                document.getElementById('acc-role').value = acc.role_label;
+                emailEl.value = acc.email;
+                emailEl.disabled = true;
+                document.getElementById('acc-pwd-label').innerText = 'Neues Passwort (Leer lassen = unverändert)';
+                pwdEl.placeholder = 'Optional neues Passwort (mind. 6 Zeichen)';
+                setPermCheckboxes(acc);
+            }
+            document.getElementById('account-modal').classList.remove('hidden');
+        }
+
+        function closeAccountModal() { document.getElementById('account-modal').classList.add('hidden'); editingUserId = null; }
+
+        function collectPerms() {
+            const manageRep = document.getElementById('p-manage-reports').checked;
+            return {
+                perm_power_off: document.getElementById('p-power-off').checked,
+                perm_view_reports: document.getElementById('p-view-reports').checked || manageRep,
+                perm_manage_reports: manageRep,
+                perm_verify_highscores: document.getElementById('p-verify-hs').checked,
+                perm_manage_parts: document.getElementById('p-manage-parts').checked,
+                perm_view_feedback: document.getElementById('p-view-feedback').checked,
+                perm_manage_players_qr: document.getElementById('p-manage-players-qr').checked,
+                perm_manage_accounts: document.getElementById('p-manage-accounts').checked
+            };
+        }
+
+        async function saveAccountModal() {
+            const name = document.getElementById('acc-name').value.trim();
+            const role = document.getElementById('acc-role').value.trim() || 'Mitglied';
+            const email = document.getElementById('acc-email').value.trim().toLowerCase();
+            const pwd = document.getElementById('acc-pwd').value;
+            const perms = collectPerms();
+
+            if (!name) { showActionToast("Bitte Anzeigenamen angeben!", "error"); return; }
+
+            const btn = document.getElementById('acc-save-btn');
+            btn.disabled = true; btn.classList.add('btn-busy');
+
+            try {
+                if (!editingUserId) {
+                    if (!email || !email.includes('@')) throw new Error("Bitte gültige E-Mail-Kennung eingeben (z.B. max@pinplay.lokal).");
+                    if (!pwd || pwd.length < 6) throw new Error("Passwort muss mindestens 6 Zeichen lang sein.");
+
+                    // Isolierter Client mit persistSession: false, damit deine eigene Admin-Session aktiv bleibt
+                    const signupClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+                        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+                    });
+
+                    const { data: suData, error: suErr } = await signupClient.auth.signUp({ email, password: pwd });
+                    if (suErr) throw suErr;
+                    if (!suData?.user?.id) throw new Error("Account konnte nicht angelegt werden.");
+                    if (Array.isArray(suData.user.identities) && suData.user.identities.length === 0) {
+                        throw new Error("Ein Account mit dieser E-Mail existiert bereits.");
+                    }
+
+                    const { error: rpcErr } = await db.rpc('admin_setup_user_account', {
+                        p_user_id: suData.user.id,
+                        p_email: email,
+                        p_display_name: name,
+                        p_role_label: role,
+                        p_perms: perms
+                    });
+                    if (rpcErr) throw rpcErr;
+
+                    showActionToast(`✓ Account „${name}“ wurde erstellt und ist sofort nutzbar!`, "success", 4200);
+                } else {
+                    if (pwd && pwd.length < 6) throw new Error("Neues Passwort muss mindestens 6 Zeichen lang sein.");
+                    const { error: updErr } = await db.rpc('admin_update_user_account', {
+                        p_user_id: editingUserId,
+                        p_display_name: name,
+                        p_role_label: role,
+                        p_perms: perms,
+                        p_new_password: pwd || ''
+                    });
+                    if (updErr) throw updErr;
+                    showActionToast(`✓ Account „${name}“ aktualisiert!`, "success");
+                }
+
+                closeAccountModal();
+                await loadAllDatabaseData();
+                renderSharedHeader();
+                renderAccountsList();
+            } catch (err) {
+                showActionToast("Fehler: " + err.message, "error", 4800);
+            } finally {
+                btn.disabled = false; btn.classList.remove('btn-busy');
+            }
+        }
+
+        async function deleteAccount(userId, name) {
+            if (!confirm(`Account „${name}“ wirklich dauerhaft löschen?`)) return;
+            const { error } = await db.rpc('admin_delete_user_account', { p_user_id: userId });
+            if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
+            showActionToast(`Account „${name}“ gelöscht.`, "info");
+            await loadAllDatabaseData();
+            renderAccountsList();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => {
+                if (!hasPerm('manage_accounts')) { window.location.href = './'; return; }
+                renderAccountsList();
+            });
+
+            if (!isLoggedIn) { window.location.href = './#login'; return; }
+            if (!hasPerm('manage_accounts')) {
+                showActionToast("Keine Berechtigung für die Account-Verwaltung.", "error");
+                window.location.href = './';
+                return;
+            }
+            if (!isTechMode) {
+                isTechMode = true; localStorage.setItem('pinplay_tech_mode', 'true'); renderSharedHeader();
+            }
+            renderAccountsList();
+        });
+    </script>
+</body>
+</html>

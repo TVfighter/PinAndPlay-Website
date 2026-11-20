@@ -67,7 +67,7 @@ const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
 const OFFICIAL_HOMEPAGE_URL = './';
 
 // Schlüssel für den Browser-Speicher + 15-Sekunden-Intervall
-const CACHE_KEY_STATE = 'pinplay_full_data_cache_v6';
+const CACHE_KEY_STATE = 'pinplay_full_data_cache_v7';
 const CACHE_TTL_MS = 15 * 1000;
 const LIVE_SYNC_INTERVAL_MS = 15 * 1000;
 
@@ -77,12 +77,41 @@ let reportsDB = [];
 let highscoresDB = [];
 let feedbackDB = [];
 let playersDB = [];
+let partsOrdersDB = [];
+let partsCatalogDB = [];
+let accountsDB = [];
+let currentUserAccount = null;
 let isLoggedIn = false;
 let isTechMode = false;
 let hasValidDailyToken = false;
 let currentPageUpdateCallback = null;
 let liveSyncTimer = null;
 let isRestoringScroll = true;
+
+// --- GRANULARES BERECHTIGUNGSSYSTEM ---
+
+function hasPerm(permKey) {
+    if (!isLoggedIn || !currentUserAccount) return false;
+    if (permKey === 'view_reports') {
+        return currentUserAccount.perm_view_reports === true || currentUserAccount.perm_manage_reports === true;
+    }
+    const colName = permKey.startsWith('perm_') ? permKey : `perm_${permKey}`;
+    return currentUserAccount[colName] === true;
+}
+
+function hasAnyAdminAreaAccess() {
+    if (!isLoggedIn || !currentUserAccount) return false;
+    return !!(
+        currentUserAccount.perm_power_off ||
+        currentUserAccount.perm_view_reports ||
+        currentUserAccount.perm_manage_reports ||
+        currentUserAccount.perm_verify_highscores ||
+        currentUserAccount.perm_manage_parts ||
+        currentUserAccount.perm_view_feedback ||
+        currentUserAccount.perm_manage_players_qr ||
+        currentUserAccount.perm_manage_accounts
+    );
+}
 
 // --- SCROLL-POSITION SPEICHERN & BEIM ZURÜCK-BUTTON WIEDERHERSTELLEN ---
 
@@ -204,7 +233,7 @@ function stylePowerButton(btnElement, powerState) {
     btnElement.style.borderColor = powerState === 'ON' ? '#2ea043' : '#cf3432';
 }
 
-// Prüft vor dem Eintragen/Schalten, ob ein gültiger Tages-QR-Code gescannt wurde (zeigt nur das eigene Toast-Popup)
+// Jeder eingeloggte Account benötigt automatisch KEIN Tages-QR-Code-Ticket
 function ensureWritePermission() {
     if (isLoggedIn || isTechMode || hasValidDailyToken) {
         return true;
@@ -240,7 +269,6 @@ function isSamePlayerIdentity(nameA, nameB) {
     return !!(profA && profB && profA.id === profB.id);
 }
 
-// Ermittelt den genauen Namen, den ein Spielerprofil an einem bestimmten Flipper nutzt
 function getProfileNameForPinball(prof, pin) {
     if (!prof || !pin) return '';
     const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
@@ -267,12 +295,14 @@ function getFormattedPlayerDisplay(rawInitials) {
     return `${upperRaw} (${prof.displayName})`;
 }
 
-// Ermittelt, welcher Haupt-Tab oben im Banner gerade aktiv ist
 function getActiveNavTab() {
     const path = window.location.pathname;
-    if (path.endsWith('highscores') || path.endsWith('/highscores') || path.endsWith('highscores.html')) return 'highscores';
-    if (path.endsWith('tech-feedback') || path.endsWith('/tech-feedback') || path.endsWith('tech-feedback.html')) return 'tech-feedback';
-    if (path.endsWith('tech-players') || path.endsWith('/tech-players') || path.endsWith('tech-players.html')) return 'tech-players';
+    if (path.endsWith('highscores') || path.endsWith('highscores.html')) return 'highscores';
+    if (path.endsWith('tech-feed') || path.endsWith('tech-feed.html')) return 'tech-feed';
+    if (path.endsWith('tech-parts') || path.endsWith('tech-parts.html')) return 'tech-parts';
+    if (path.endsWith('tech-feedback') || path.endsWith('tech-feedback.html')) return 'tech-feedback';
+    if (path.endsWith('tech-players') || path.endsWith('tech-players.html')) return 'tech-players';
+    if (path.endsWith('tech-accounts') || path.endsWith('tech-accounts.html')) return 'tech-accounts';
     return 'overview';
 }
 
@@ -280,21 +310,41 @@ function renderSharedHeader() {
     const header = document.getElementById('main-header');
     if (!header) return;
 
-    if (isTechMode) header.classList.add('tech-mode');
+    const canUseTechArea = hasAnyAdminAreaAccess();
+    if (isTechMode && canUseTechArea) header.classList.add('tech-mode');
     else header.classList.remove('tech-mode');
 
     const activeTab = getActiveNavTab();
-    const overviewClass = activeTab === 'overview' ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
-    const highscoresClass = activeTab === 'highscores' ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
-    const techFeedbackClass = activeTab === 'tech-feedback' ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
-    const techPlayersClass = activeTab === 'tech-players' ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
+    const cls = (tab) => activeTab === tab ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
 
-    const fbCountSuffix = feedbackDB.length > 0 ? ` (${feedbackDB.length})` : '';
-    const techExtraBtnsHtml = (isLoggedIn && isTechMode)
-        ? `
-            <button class="${techPlayersClass}" onclick="window.location.href='tech-players'">Kürzel &amp; QR-Code</button>
-            <button class="${techFeedbackClass}" onclick="window.location.href='tech-feedback'">Spieler-Feedback${fbCountSuffix}</button>
-        `
+    let techBtnsHtml = '';
+    if (isLoggedIn && isTechMode && canUseTechArea) {
+        if (hasPerm('view_reports') || hasPerm('verify_highscores')) {
+            const unverifReps = hasPerm('view_reports') ? reportsDB.filter(r => r.status === 'offen' && !r.verifiziert).length : 0;
+            const unverifHs = hasPerm('verify_highscores') ? highscoresDB.filter(h => !h.verifiziert).length : 0;
+            const totalUnverif = unverifReps + unverifHs;
+            const feedBadge = totalUnverif > 0 ? `<span class="badge-nav-count">${totalUnverif}</span>` : '';
+            techBtnsHtml += `<button class="${cls('tech-feed')}" onclick="window.location.href='tech-feed'">News-Feed${feedBadge}</button>`;
+        }
+        if (hasPerm('manage_parts') || hasPerm('view_reports')) {
+            const openParts = partsOrdersDB.filter(p => p.status === 'benoetigt').length;
+            const partsBadge = openParts > 0 ? `<span class="badge-nav-count count-gold">${openParts}</span>` : '';
+            techBtnsHtml += `<button class="${cls('tech-parts')}" onclick="window.location.href='tech-parts'">Ersatzteile${partsBadge}</button>`;
+        }
+        if (hasPerm('manage_players_qr')) {
+            techBtnsHtml += `<button class="${cls('tech-players')}" onclick="window.location.href='tech-players'">Kürzel &amp; QR/TV</button>`;
+        }
+        if (hasPerm('view_feedback')) {
+            const fbSuffix = feedbackDB.length > 0 ? ` (${feedbackDB.length})` : '';
+            techBtnsHtml += `<button class="${cls('tech-feedback')}" onclick="window.location.href='tech-feedback'">Feedback${fbSuffix}</button>`;
+        }
+        if (hasPerm('manage_accounts')) {
+            techBtnsHtml += `<button class="${cls('tech-accounts')}" onclick="window.location.href='tech-accounts'">Accounts</button>`;
+        }
+    }
+
+    const userLabel = (isLoggedIn && currentUserAccount && currentUserAccount.display_name)
+        ? ` (${currentUserAccount.display_name})`
         : '';
 
     header.innerHTML = `
@@ -302,13 +352,15 @@ function renderSharedHeader() {
             <img src="logo.png" alt="Pin & Play Retro Gaming" class="logo-img">
         </a>
         <div class="quick-actions">
-            <button class="${overviewClass}" onclick="goHome()">Flipper Übersicht</button>
-            <button class="${highscoresClass}" onclick="window.location.href='highscores'">Highscores</button>
-            ${techExtraBtnsHtml}
-            <button class="btn-nav-page" onclick="toggleTechMode()" id="tech-toggle" style="display: ${isLoggedIn ? 'inline-block' : 'none'};">
+            <button class="${cls('overview')}" onclick="goHome()">Flipper Übersicht</button>
+            <button class="${cls('highscores')}" onclick="window.location.href='highscores'">Highscores</button>
+            ${techBtnsHtml}
+            <button class="btn-nav-page" onclick="toggleTechMode()" id="tech-toggle" style="display: ${canUseTechArea ? 'inline-block' : 'none'};">
                 Techniker Modus: ${isTechMode ? 'AN' : 'AUS'}
             </button>
-            <button class="btn-nav-util ${isLoggedIn ? '' : 'hidden'}" onclick="doLogout()" id="logout-btn">Logout</button>
+            <button class="btn-nav-util ${isLoggedIn ? '' : 'hidden'}" onclick="doLogout()" id="logout-btn" title="Eingeloggt${userLabel}">
+                Logout${userLabel}
+            </button>
         </div>
     `;
 }
@@ -321,14 +373,14 @@ function ensureLoginModalExists() {
     modal.innerHTML = `
         <div class="modal-box" style="max-width: 400px;">
             <div class="detail-header">
-                <h2 style="margin: 0;">Techniker Login</h2>
+                <h2 style="margin: 0;">Account Login</h2>
                 <button class="btn-switch" onclick="closeLoginModal()">Schließen</button>
             </div>
             <div class="report-form">
                 <label><strong>Benutzerkennung (E-Mail)</strong></label>
-                <input type="email" id="login-email" placeholder="techniker@pinplay.lokal">
+                <input type="email" id="login-email" placeholder="name@pinplay.lokal">
                 <label><strong>Passwort</strong></label>
-                <input type="password" id="login-pwd">
+                <input type="password" id="login-pwd" onkeydown="if(event.key==='Enter') doLogin()">
                 <button class="btn-green" style="width: 100%; padding: 14px;" onclick="doLogin()">Einloggen</button>
                 <p id="login-error" style="color: #ff7b72; display: none; margin-top: 15px; font-weight: bold;"></p>
             </div>
@@ -343,8 +395,12 @@ function checkHashLogin() {
     if (window.location.hash === '#login') {
         if (isLoggedIn) {
             window.location.hash = '';
-            localStorage.setItem('pinplay_tech_mode', 'true');
-            window.location.href = 'techniker';
+            if (hasAnyAdminAreaAccess()) {
+                localStorage.setItem('pinplay_tech_mode', 'true');
+                window.location.href = 'techniker';
+            } else {
+                window.location.href = './';
+            }
         } else {
             modal.classList.remove('hidden');
         }
@@ -358,25 +414,33 @@ function closeLoginModal() {
 }
 
 async function doLogin() {
-    const email = document.getElementById('login-email').value;
+    const email = document.getElementById('login-email').value.trim();
     const pwd = document.getElementById('login-pwd').value;
     const errDisplay = document.getElementById('login-error');
 
-    const { error } = await db.auth.signInWithPassword({ email, password: pwd });
+    const { data, error } = await db.auth.signInWithPassword({ email, password: pwd });
     if (error) {
         errDisplay.innerText = "Login fehlgeschlagen: " + error.message;
         errDisplay.style.display = 'block';
     } else {
         errDisplay.style.display = 'none';
         window.location.hash = '';
+        isLoggedIn = true;
         localStorage.setItem('pinplay_logged_in', 'true');
-        localStorage.setItem('pinplay_tech_mode', 'true');
         localStorage.removeItem(CACHE_KEY_STATE);
-        window.location.href = 'techniker';
+
+        await loadCurrentUserAccount(data?.user?.id);
+        if (hasAnyAdminAreaAccess()) {
+            localStorage.setItem('pinplay_tech_mode', 'true');
+            window.location.href = 'techniker';
+        } else {
+            localStorage.setItem('pinplay_tech_mode', 'false');
+            window.location.href = './';
+        }
     }
 }
 
-// Logout behält wie gewünscht das klassische Browser-Confirm-Popup
+// Logout behält das klassische Browser-Confirm-Popup
 async function doLogout() {
     if (!confirm("Möchtest du dich wirklich ausloggen?")) return;
     await db.auth.signOut();
@@ -387,12 +451,12 @@ async function doLogout() {
 }
 
 function goHome() {
-    if (isTechMode) window.location.href = 'techniker';
+    if (isTechMode && hasAnyAdminAreaAccess()) window.location.href = 'techniker';
     else window.location.href = './';
 }
 
 function toggleTechMode() {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn || !hasAnyAdminAreaAccess()) return;
     isTechMode = !isTechMode;
     localStorage.setItem('pinplay_tech_mode', isTechMode ? 'true' : 'false');
 
@@ -430,6 +494,10 @@ function saveStateToCache() {
             highscoresDB,
             feedbackDB,
             playersDB,
+            partsOrdersDB,
+            partsCatalogDB,
+            accountsDB,
+            currentUserAccount,
             hasValidDailyToken,
             timestamp: Date.now()
         }));
@@ -447,6 +515,10 @@ function restoreStateFromCache() {
             highscoresDB = parsed.highscoresDB || [];
             feedbackDB = parsed.feedbackDB || [];
             playersDB = parsed.playersDB || [];
+            partsOrdersDB = parsed.partsOrdersDB || [];
+            partsCatalogDB = parsed.partsCatalogDB || [];
+            accountsDB = parsed.accountsDB || [];
+            currentUserAccount = parsed.currentUserAccount || null;
             hasValidDailyToken = parsed.hasValidDailyToken === true;
             const age = Date.now() - (parsed.timestamp || 0);
             return { loaded: true, isFresh: age < CACHE_TTL_MS };
@@ -476,7 +548,49 @@ async function verifyDailyTokenStatus() {
     }
 }
 
-// --- 15-SEKUNDEN-LIVE-SYNC FÜR TECHNIKER & NUTZER MIT GÜLTIGEM TOKEN ---
+async function loadCurrentUserAccount(explicitUserId = null) {
+    if (!isLoggedIn) {
+        currentUserAccount = null;
+        return;
+    }
+    try {
+        let uid = explicitUserId;
+        if (!uid) {
+            const { data } = await db.auth.getSession();
+            uid = data?.session?.user?.id || null;
+        }
+        if (!uid) {
+            currentUserAccount = null;
+            return;
+        }
+        const { data: accData, error } = await db
+            .from('user_accounts')
+            .select('*')
+            .eq('user_id', uid)
+            .maybeSingle();
+
+        if (!error && accData) {
+            currentUserAccount = accData;
+        } else {
+            // Fallback falls Tabelle noch nicht angelegt wurde
+            currentUserAccount = {
+                user_id: uid,
+                display_name: 'Techniker',
+                role_label: 'Admin / Techniker',
+                perm_power_off: true,
+                perm_view_reports: true,
+                perm_manage_reports: true,
+                perm_verify_highscores: true,
+                perm_manage_parts: true,
+                perm_view_feedback: true,
+                perm_manage_players_qr: true,
+                perm_manage_accounts: true
+            };
+        }
+    } catch (e) {}
+}
+
+// --- 15-SEKUNDEN-LIVE-SYNC FÜR EINGELOGGTE ACCOUNTS & NUTZER MIT GÜLTIGEM TOKEN ---
 
 function startLiveSyncPolling() {
     if (liveSyncTimer) clearInterval(liveSyncTimer);
@@ -497,8 +611,8 @@ function startLiveSyncPolling() {
 async function initSharedApp(onBackgroundUpdate = null) {
     currentPageUpdateCallback = onBackgroundUpdate;
     isLoggedIn = localStorage.getItem('pinplay_logged_in') === 'true';
-    isTechMode = isLoggedIn && localStorage.getItem('pinplay_tech_mode') === 'true';
     const cacheStatus = restoreStateFromCache();
+    isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
     renderSharedHeader();
     checkHashLogin();
 
@@ -516,6 +630,7 @@ async function initSharedApp(onBackgroundUpdate = null) {
             (async () => {
                 await syncSessionInBackground();
                 await loadAllDatabaseData();
+                isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
                 renderSharedHeader();
                 if (typeof currentPageUpdateCallback === 'function') currentPageUpdateCallback();
             })();
@@ -528,6 +643,7 @@ async function initSharedApp(onBackgroundUpdate = null) {
     await syncSessionInBackground();
     await verifyDailyTokenStatus();
     await loadAllDatabaseData();
+    isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
     renderSharedHeader();
     setTimeout(restoreScrollPositionIfNeeded, 20);
     startLiveSyncPolling();
@@ -543,36 +659,57 @@ async function syncSessionInBackground() {
                 localStorage.removeItem('pinplay_tech_mode');
                 localStorage.removeItem('pinplay_logged_in');
                 isTechMode = false;
+                currentUserAccount = null;
                 feedbackDB = [];
+                reportsDB = [];
+                partsOrdersDB = [];
+                partsCatalogDB = [];
+                accountsDB = [];
             } else {
                 localStorage.setItem('pinplay_logged_in', 'true');
                 hasValidDailyToken = true;
+                await loadCurrentUserAccount(data.session.user.id);
             }
+            renderSharedHeader();
+        } else if (isLoggedIn && !currentUserAccount && data.session) {
+            await loadCurrentUserAccount(data.session.user.id);
             renderSharedHeader();
         }
     } catch (e) {}
 }
 
 async function loadAllDatabaseData() {
+    if (isLoggedIn) {
+        await loadCurrentUserAccount();
+    }
+
+    const canReadReports = hasPerm('view_reports');
+    const canReadFeedback = hasPerm('view_feedback');
+    const canReadParts = hasPerm('manage_parts') || hasPerm('view_reports');
+    const canReadAccounts = hasPerm('manage_accounts');
+
     const queries = [
         db.from('flipper').select('*').order('name', { ascending: true }),
         db.from('designer').select('*'),
         db.from('highscore').select('*').order('score', { ascending: false }),
-        db.from('players').select('*').order('display_name', { ascending: true })
+        db.from('players').select('*').order('display_name', { ascending: true }),
+        canReadReports ? db.from('reports').select('*') : Promise.resolve({ data: [] }),
+        canReadFeedback ? db.from('feedback').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+        canReadParts ? db.from('parts_orders').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+        canReadParts ? db.from('parts_catalog').select('*').order('part_name', { ascending: true }) : Promise.resolve({ data: [] }),
+        canReadAccounts ? db.from('user_accounts').select('*').order('display_name', { ascending: true }) : Promise.resolve({ data: [] })
     ];
-
-    if (isLoggedIn) {
-        queries.push(db.from('reports').select('*'));
-        queries.push(db.from('feedback').select('*').order('created_at', { ascending: false }));
-    }
 
     const results = await Promise.all(queries);
     const dbPins = results[0].data;
     const dbDes = results[1].data;
     const dbHs = results[2].data;
     const dbPlayers = results[3] && !results[3].error ? results[3].data : [];
-    const dbReps = (isLoggedIn && results[4]) ? results[4].data : [];
-    const dbFb = (isLoggedIn && results[5]) ? results[5].data : [];
+    const dbReps = (results[4] && !results[4].error) ? results[4].data : [];
+    const dbFb = (results[5] && !results[5].error) ? results[5].data : [];
+    const dbPartsOrders = (results[6] && !results[6].error) ? results[6].data : [];
+    const dbPartsCatalog = (results[7] && !results[7].error) ? results[7].data : [];
+    const dbAccounts = (results[8] && !results[8].error) ? results[8].data : [];
 
     playersDB = (dbPlayers || []).map(pl => ({
         id: pl.id,
@@ -599,7 +736,6 @@ async function loadAllDatabaseData() {
             const parsed = parseInt(r.intensitaet, 10);
             if (parsed >= 1 && parsed <= 3) prioNum = parsed;
         }
-
         const parsedMergeCount = parseInt(r.merge_count, 10);
 
         return {
@@ -620,15 +756,41 @@ async function loadAllDatabaseData() {
         };
     });
 
-    if (isLoggedIn) {
-        feedbackDB = (dbFb || []).map(f => ({
-            id: f.id,
-            date: f.created_at,
-            text: f.nachricht || '',
-            email: f.email || '',
-            foto: f.foto || ''
-        }));
-    }
+    feedbackDB = (dbFb || []).map(f => ({
+        id: f.id,
+        date: f.created_at,
+        text: f.nachricht || '',
+        email: f.email || '',
+        foto: f.foto || ''
+    }));
+
+    partsOrdersDB = (dbPartsOrders || []).map(o => ({
+        id: o.id,
+        pinballId: o.flipper_id || null,
+        reportId: o.report_id || null,
+        partName: o.part_name || '',
+        quantity: Number(o.quantity || 1),
+        shopName: o.shop_name || '',
+        shopUrl: o.shop_url || '',
+        status: o.status || 'benoetigt',
+        notes: o.notes || '',
+        createdBy: o.created_by || '',
+        date: o.created_at,
+        orderedAt: o.ordered_at || null,
+        deliveredAt: o.delivered_at || null
+    }));
+
+    partsCatalogDB = (dbPartsCatalog || []).map(c => ({
+        id: c.id,
+        partName: c.part_name || '',
+        category: c.category || 'Allgemein',
+        shopName: c.shop_name || '',
+        shopUrl: c.shop_url || '',
+        partNumber: c.part_number || '',
+        notes: c.notes || ''
+    }));
+
+    accountsDB = dbAccounts || [];
 
     pinballs = (dbPins || []).map(p => {
         const designerNames = p.designer_id
@@ -756,17 +918,19 @@ async function togglePinballPower(pinballId, btnElement, onDone = null) {
     const targetPin = pinballs.find(p => p.id === pinballId);
     if (!targetPin) return;
 
-    if (!isTechMode && !targetPin.isAktiv) {
+    const canPowerOff = hasPerm('power_off');
+
+    if (!canPowerOff && !targetPin.isAktiv) {
         showActionToast("Sicherheitssperre: Inaktive Flipper können nicht eingeschaltet werden!", "error");
         return;
     }
 
-    if (!isTechMode && !ensureWritePermission()) {
+    if (!canPowerOff && !ensureWritePermission()) {
         return;
     }
 
     const isCurrentlyOn = targetPin.power === 'ON';
-    if (isCurrentlyOn && !isTechMode) {
+    if (isCurrentlyOn && !canPowerOff) {
         showActionToast(`„${targetPin.name}“ ist bereits eingeschaltet!`, "info");
         return;
     }

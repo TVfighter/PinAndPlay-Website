@@ -97,7 +97,7 @@
                 else inactiveBadge.classList.add('hidden');
             }
 
-            if (isTechMode) {
+            if (isTechMode && hasPerm('power_off')) {
                 stylePowerButton(pwrBtn, currentPinball.power);
                 reportBtn.style.display = 'inline-block';
                 addScoreBtn.style.display = 'inline-flex';

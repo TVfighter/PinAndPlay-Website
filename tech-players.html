@@ -45,6 +45,7 @@
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <button class="btn-yellow" onclick="enterKioskMode()">Vollbild-Display-Modus starten</button>
                     <button class="btn-switch" onclick="copyQrLink()">Direktlink kopieren</button>
+                    <button class="btn-green" onclick="window.open('tv-highscores', '_blank')">100"-TV Rekorde starten</button>
                 </div>
             </div>
             <div id="tech-qr-preview" style="background: white; padding: 12px; border-radius: 8px; border: 2px solid var(--gold-mid);"></div>
@@ -335,6 +336,11 @@
             await initSharedApp(() => renderPlayersList());
             if (!isLoggedIn) {
                 window.location.href = './#login';
+                return;
+            }
+            if (!hasPerm('manage_players_qr')) {
+                showActionToast("Keine Berechtigung für Kürzel & QR-Code.", "error");
+                window.location.href = './';
                 return;
             }
             if (!isTechMode) {

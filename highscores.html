@@ -151,7 +151,7 @@
 
             orderedPins.forEach(p => {
                 const unverifiedHsCount = highscoresDB.filter(h => h.pinballId === p.id && !h.verifiziert).length;
-                const hasUnverifiedForTech = isTechMode && unverifiedHsCount > 0;
+                const hasUnverifiedForTech = isTechMode && hasPerm('verify_highscores') && unverifiedHsCount > 0;
 
                 const opt = document.createElement('option');
                 opt.value = p.id;

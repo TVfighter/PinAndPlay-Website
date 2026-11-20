@@ -89,6 +89,9 @@
         }
 
         function renderTechTableBody() {
+            const canPwrOff = hasPerm('power_off');
+            document.getElementById('bulk-pwr-on-btn').style.display = canPwrOff ? 'inline-block' : 'none';
+            document.getElementById('bulk-pwr-off-btn').style.display = canPwrOff ? 'inline-block' : 'none';
             const tbody = document.getElementById('tech-table-body');
             if (!tbody) return;
 
@@ -184,10 +187,8 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             await initSharedApp(() => renderTechTableBody());
-            if (!isLoggedIn) {
-                window.location.href = './#login';
-                return;
-            }
+            if (!isLoggedIn) { window.location.href = './#login'; return; }
+            if (!hasAnyAdminAreaAccess()) { window.location.href = './'; return; }
             if (!isTechMode) {
                 isTechMode = true;
                 localStorage.setItem('pinplay_tech_mode', 'true');

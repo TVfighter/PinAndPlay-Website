@@ -108,6 +108,11 @@
                     window.location.href = './#login';
                     return;
                 }
+                if (!hasPerm('view_feedback')) {
+                    showActionToast("Keine Berechtigung für Spieler-Feedback.", "error");
+                    window.location.href = './';
+                    return;
+                }
                 renderFeedbackList();
             });
 
