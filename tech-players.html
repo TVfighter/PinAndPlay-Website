@@ -335,7 +335,7 @@
         window.addEventListener('DOMContentLoaded', async () => {
             await initSharedApp(() => renderPlayersList());
             if (!isLoggedIn) {
-                window.location.href = './#login';
+                redirectToLoginWithReturn();
                 return;
             }
             if (!hasPerm('manage_players_qr')) {

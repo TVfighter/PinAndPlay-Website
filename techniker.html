@@ -112,26 +112,23 @@
                 return techTableSortAsc ? cmp : -cmp;
             });
 
-            tbody.innerHTML = '';
-            sortedPinballs.forEach(p => {
-                const statusColorClass = p.isAktiv ? 'status-box-green' : 'status-box-orange';
-                const statusTooltip = p.isAktiv ? 'Spielbereit (Aktiv)' : 'Wartung (Inaktiv)';
-                const pwrColor = p.power === 'ON' ? '#3fb950' : '#ff7b72';
+            const pwrDisabled = (!canPwrOff && p.power === 'ON') ? 'disabled style="opacity:0.6; cursor:not-allowed; font-weight: bold; color: #3fb950;"' : `style="font-weight: bold; color: ${pwrColor};"`;
+            const reportsCellHtml = hasPerm('view_reports') ? getReportCountsHtml(p.id) : '<span style="color:var(--text-muted);">-</span>';
 
-                tbody.innerHTML += `
-                    <tr>
-                        <td><strong style="color:var(--gold-light);">${p.short}</strong></td>
-                        <td><span class="clickable-name" onclick="openTechDetailFromTable(${p.id})">${p.name}</span></td>
-                        <td><span class="status-color-box ${statusColorClass}" title="${statusTooltip}"></span></td>
-                        <td>${getReportCountsHtml(p.id)}</td>
-                        <td>
-                            <button id="tech-table-pwr-btn-${p.id}" class="btn-switch" onclick="handleTablePowerClick(${p.id})" style="font-weight: bold; color: ${pwrColor};">
-                                ${p.power}
-                            </button>
-                        </td>
-                        <td><button class="btn-yellow">PDF öffnen</button></td>
-                    </tr>
-                `;
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong style="color:var(--gold-light);">${p.short}</strong></td>
+                    <td><span class="clickable-name" onclick="openTechDetailFromTable(${p.id})">${p.name}</span></td>
+                    <td><span class="status-color-box ${statusColorClass}" title="${statusTooltip}"></span></td>
+                    <td>${reportsCellHtml}</td>
+                    <td>
+                        <button id="tech-table-pwr-btn-${p.id}" class="btn-switch" onclick="handleTablePowerClick(${p.id})" ${pwrDisabled}>
+                            ${p.power}
+                        </button>
+                    </td>
+                    <td><button class="btn-yellow">PDF öffnen</button></td>
+                </tr>
+            `;
             });
         }
 
@@ -187,7 +184,7 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             await initSharedApp(() => renderTechTableBody());
-            if (!isLoggedIn) { window.location.href = './#login'; return; }
+            if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
             if (!hasAnyAdminAreaAccess()) { window.location.href = './'; return; }
             if (!isTechMode) {
                 isTechMode = true;

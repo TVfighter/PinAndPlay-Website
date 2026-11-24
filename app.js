@@ -3,6 +3,7 @@ const DAILY_TOKEN_KEY = 'pinplay_daily_token';
 const NAV_DETAIL_ORIGIN_KEY = 'pinplay_origin_detail';
 const NAV_HS_SUBMIT_ORIGIN_KEY = 'pinplay_origin_hs_submit';
 const BACK_NAV_FLAG_KEY = 'pinplay_is_back_nav';
+const POST_LOGIN_REDIRECT_KEY = 'pinplay_post_login_redirect';
 
 let navOriginDetail = sessionStorage.getItem(NAV_DETAIL_ORIGIN_KEY) || '';
 let navOriginHsSubmit = sessionStorage.getItem(NAV_HS_SUBMIT_ORIGIN_KEY) || '';
@@ -63,15 +64,12 @@ const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
     }
 });
 
-// Ziel-URL für das Pin&Play-Logo (Offizielle Homepage)
 const OFFICIAL_HOMEPAGE_URL = './';
-
-// Schlüssel für den Browser-Speicher + 15-Sekunden-Intervall
-const CACHE_KEY_STATE = 'pinplay_full_data_cache_v7';
+const CACHE_KEY_STATE = 'pinplay_full_data_cache_v8';
 const CACHE_TTL_MS = 15 * 1000;
 const LIVE_SYNC_INTERVAL_MS = 15 * 1000;
 
-// Globale Variablen
+// Globale Datenspeicher
 let pinballs = [];
 let reportsDB = [];
 let highscoresDB = [];
@@ -79,6 +77,7 @@ let feedbackDB = [];
 let playersDB = [];
 let partsOrdersDB = [];
 let partsCatalogDB = [];
+let partsTagsDB = [];
 let accountsDB = [];
 let currentUserAccount = null;
 let isLoggedIn = false;
@@ -92,24 +91,67 @@ let isRestoringScroll = true;
 
 function hasPerm(permKey) {
     if (!isLoggedIn || !currentUserAccount) return false;
-    if (permKey === 'view_reports') {
-        return currentUserAccount.perm_view_reports === true || currentUserAccount.perm_manage_reports === true;
+    // Admin besitzt automatisch sämtliche Rechte
+    if (currentUserAccount.perm_manage_accounts === true) return true;
+
+    switch (permKey) {
+        case 'admin':
+        case 'manage_accounts':
+            return false;
+        case 'no_qr':
+            return currentUserAccount.perm_no_qr === true;
+        case 'power_off':
+            return currentUserAccount.perm_power_off === true;
+        case 'auto_verify_reports':
+            return currentUserAccount.perm_auto_verify_reports === true
+                || currentUserAccount.perm_view_reports === true
+                || currentUserAccount.perm_manage_reports === true;
+        case 'view_reports':
+            return currentUserAccount.perm_view_reports === true
+                || currentUserAccount.perm_manage_reports === true;
+        case 'manage_reports':
+            return currentUserAccount.perm_manage_reports === true;
+        case 'auto_verify_highscores':
+            return currentUserAccount.perm_auto_verify_highscores === true
+                || currentUserAccount.perm_verify_highscores === true;
+        case 'verify_highscores':
+            return currentUserAccount.perm_verify_highscores === true;
+        case 'request_parts':
+            return currentUserAccount.perm_request_parts === true
+                || currentUserAccount.perm_manage_parts === true;
+        case 'manage_parts':
+            return currentUserAccount.perm_manage_parts === true;
+        case 'view_feedback':
+            return currentUserAccount.perm_view_feedback === true;
+        case 'manage_players_qr':
+            return currentUserAccount.perm_manage_players_qr === true;
+        default: {
+            const col = permKey.startsWith('perm_') ? permKey : `perm_${permKey}`;
+            return currentUserAccount[col] === true;
+        }
     }
-    const colName = permKey.startsWith('perm_') ? permKey : `perm_${permKey}`;
-    return currentUserAccount[colName] === true;
+}
+
+function getReportAccessLevel(acc = currentUserAccount) {
+    if (!acc) return 0;
+    if (acc.perm_manage_accounts || acc.perm_manage_reports) return 3;
+    if (acc.perm_view_reports) return 2;
+    if (acc.perm_auto_verify_reports) return 1;
+    return 0;
 }
 
 function hasAnyAdminAreaAccess() {
     if (!isLoggedIn || !currentUserAccount) return false;
     return !!(
+        currentUserAccount.perm_manage_accounts ||
         currentUserAccount.perm_power_off ||
         currentUserAccount.perm_view_reports ||
         currentUserAccount.perm_manage_reports ||
         currentUserAccount.perm_verify_highscores ||
+        currentUserAccount.perm_request_parts ||
         currentUserAccount.perm_manage_parts ||
         currentUserAccount.perm_view_feedback ||
-        currentUserAccount.perm_manage_players_qr ||
-        currentUserAccount.perm_manage_accounts
+        currentUserAccount.perm_manage_players_qr
     );
 }
 
@@ -128,9 +170,7 @@ function saveCurrentScrollPos() {
 }
 
 window.addEventListener('scroll', () => {
-    if (!isRestoringScroll) {
-        saveCurrentScrollPos();
-    }
+    if (!isRestoringScroll) saveCurrentScrollPos();
 }, { passive: true });
 
 function navigateBackTo(targetUrl) {
@@ -158,12 +198,10 @@ function restoreScrollPositionIfNeeded() {
             return;
         }
     }
-    setTimeout(() => {
-        isRestoringScroll = false;
-    }, 80);
+    setTimeout(() => { isRestoringScroll = false; }, 80);
 }
 
-// --- VISUELLES TOAST-BANNER FÜR EINDEUTIGES BUTTON-FEEDBACK ---
+// --- VISUELLES TOAST-BANNER ---
 
 function showActionToast(message, type = 'success', durationMs = 3500) {
     let container = document.getElementById('pinplay-toast-container');
@@ -190,6 +228,11 @@ function formatScore(num) {
     return Number(num || 0).toLocaleString('de-DE');
 }
 
+function formatEuro(val) {
+    if (val === null || val === undefined || val === '' || isNaN(Number(val))) return '';
+    return Number(val).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+}
+
 function formatDateTime(isoStr) {
     if (!isoStr) return '-';
     const d = new Date(isoStr);
@@ -200,9 +243,7 @@ function formatDateTime(isoStr) {
 function getFlipperImageUrl(rawValue) {
     if (!rawValue || rawValue.trim() === '') return null;
     const trimmed = rawValue.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-        return trimmed;
-    }
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
     const { data } = db.storage.from('flipper-fotos').getPublicUrl(trimmed);
     return data ? data.publicUrl : null;
 }
@@ -210,9 +251,7 @@ function getFlipperImageUrl(rawValue) {
 function normalizeReportStatus(rawStatus) {
     if (!rawStatus) return 'offen';
     const lower = String(rawStatus).trim().toLowerCase();
-    if (lower === 'behoben' || lower === 'erledigt' || lower === 'geschlossen') {
-        return 'behoben';
-    }
+    if (lower === 'behoben' || lower === 'erledigt' || lower === 'geschlossen') return 'behoben';
     return 'offen';
 }
 
@@ -233,9 +272,9 @@ function stylePowerButton(btnElement, powerState) {
     btnElement.style.borderColor = powerState === 'ON' ? '#2ea043' : '#cf3432';
 }
 
-// Jeder eingeloggte Account benötigt automatisch KEIN Tages-QR-Code-Ticket
+// Prüft, ob Account vom QR-Code befreit ist (perm_no_qr / Admin) ODER ein gültiges Tages-QR-Token gescannt wurde
 function ensureWritePermission() {
-    if (isLoggedIn || isTechMode || hasValidDailyToken) {
+    if (hasPerm('no_qr') || hasValidDailyToken) {
         return true;
     }
     showActionToast("Zugangssperre: Bitte scanne zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!", "error", 4500);
@@ -263,7 +302,6 @@ function isSamePlayerIdentity(nameA, nameB) {
     const normB = String(nameB || '').trim().toUpperCase();
     if (!normA || !normB) return false;
     if (normA === normB) return true;
-
     const profA = resolvePlayerProfile(normA);
     const profB = resolvePlayerProfile(normB);
     return !!(profA && profB && profA.id === profB.id);
@@ -272,16 +310,13 @@ function isSamePlayerIdentity(nameA, nameB) {
 function getProfileNameForPinball(prof, pin) {
     if (!prof || !pin) return '';
     const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
-
     if (effectiveMaxLen <= 3) {
         return (prof.shortInitials || prof.displayName).toUpperCase().substring(0, 3);
     }
-
     const customForPin = prof.flipperTags ? prof.flipperTags[String(pin.id)] : null;
     if (customForPin && String(customForPin).trim() !== '') {
         return String(customForPin).trim().toUpperCase().substring(0, effectiveMaxLen);
     }
-
     return prof.displayName.toUpperCase().substring(0, effectiveMaxLen);
 }
 
@@ -289,11 +324,11 @@ function getFormattedPlayerDisplay(rawInitials) {
     const prof = resolvePlayerProfile(rawInitials);
     if (!prof) return rawInitials;
     const upperRaw = String(rawInitials).trim().toUpperCase();
-    if (upperRaw === prof.displayName.toUpperCase()) {
-        return prof.displayName;
-    }
+    if (upperRaw === prof.displayName.toUpperCase()) return prof.displayName;
     return `${upperRaw} (${prof.displayName})`;
 }
+
+// --- AUFGERÄUMTES HEADER-BANNER MIT DROPDOWNS ---
 
 function getActiveNavTab() {
     const path = window.location.pathname;
@@ -306,64 +341,125 @@ function getActiveNavTab() {
     return 'overview';
 }
 
+function closeAllHeaderDropdowns() {
+    document.querySelectorAll('.nav-dropdown-menu').forEach(m => m.classList.add('hidden'));
+}
+
+function toggleHeaderDropdown(menuId, event) {
+    if (event) event.stopPropagation();
+    const target = document.getElementById(menuId);
+    if (!target) return;
+    const wasHidden = target.classList.contains('hidden');
+    closeAllHeaderDropdowns();
+    if (wasHidden) target.classList.remove('hidden');
+}
+
+document.addEventListener('click', () => closeAllHeaderDropdowns());
+
 function renderSharedHeader() {
     const header = document.getElementById('main-header');
     if (!header) return;
 
     const canUseTechArea = hasAnyAdminAreaAccess();
-    if (isTechMode && canUseTechArea) header.classList.add('tech-mode');
+    const techActive = isLoggedIn && isTechMode && canUseTechArea;
+
+    if (techActive) header.classList.add('tech-mode');
     else header.classList.remove('tech-mode');
 
     const activeTab = getActiveNavTab();
     const cls = (tab) => activeTab === tab ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
 
-    let techBtnsHtml = '';
-    if (isLoggedIn && isTechMode && canUseTechArea) {
+    let primaryTechHtml = '';
+    let manageMenuItems = [];
+
+    if (techActive) {
+        // 1. News-Feed direkt sichtbar
         if (hasPerm('view_reports') || hasPerm('verify_highscores')) {
             const unverifReps = hasPerm('view_reports') ? reportsDB.filter(r => r.status === 'offen' && !r.verifiziert).length : 0;
             const unverifHs = hasPerm('verify_highscores') ? highscoresDB.filter(h => !h.verifiziert).length : 0;
             const totalUnverif = unverifReps + unverifHs;
             const feedBadge = totalUnverif > 0 ? `<span class="badge-nav-count">${totalUnverif}</span>` : '';
-            techBtnsHtml += `<button class="${cls('tech-feed')}" onclick="window.location.href='tech-feed'">News-Feed${feedBadge}</button>`;
+            primaryTechHtml += `<button class="${cls('tech-feed')}" onclick="window.location.href='tech-feed'">News-Feed${feedBadge}</button>`;
         }
-        if (hasPerm('manage_parts') || hasPerm('view_reports')) {
+
+        // 2. Ersatzteile & Inventar direkt sichtbar
+        if (hasPerm('request_parts') || hasPerm('manage_parts') || hasPerm('view_reports')) {
             const openParts = partsOrdersDB.filter(p => p.status === 'benoetigt').length;
             const partsBadge = openParts > 0 ? `<span class="badge-nav-count count-gold">${openParts}</span>` : '';
-            techBtnsHtml += `<button class="${cls('tech-parts')}" onclick="window.location.href='tech-parts'">Ersatzteile${partsBadge}</button>`;
+            primaryTechHtml += `<button class="${cls('tech-parts')}" onclick="window.location.href='tech-parts'">Ersatzteile${partsBadge}</button>`;
+        }
+
+        // 3. Seltener genutzte Verwaltungsseiten sauber im "Verwaltung ▾"-Menü bündeln
+        if (hasPerm('view_feedback')) {
+            const fbBadge = feedbackDB.length > 0 ? `<span class="badge-nav-count count-gold">${feedbackDB.length}</span>` : '';
+            manageMenuItems.push(`<button class="nav-dropdown-item ${activeTab === 'tech-feedback' ? 'item-active' : ''}" onclick="window.location.href='tech-feedback'"><span>Spieler-Feedback</span>${fbBadge}</button>`);
         }
         if (hasPerm('manage_players_qr')) {
-            techBtnsHtml += `<button class="${cls('tech-players')}" onclick="window.location.href='tech-players'">Kürzel &amp; QR/TV</button>`;
-        }
-        if (hasPerm('view_feedback')) {
-            const fbSuffix = feedbackDB.length > 0 ? ` (${feedbackDB.length})` : '';
-            techBtnsHtml += `<button class="${cls('tech-feedback')}" onclick="window.location.href='tech-feedback'">Feedback${fbSuffix}</button>`;
+            manageMenuItems.push(`<button class="nav-dropdown-item ${activeTab === 'tech-players' ? 'item-active' : ''}" onclick="window.location.href='tech-players'"><span>Kürzel &amp; Tages-QR</span></button>`);
+            manageMenuItems.push(`<button class="nav-dropdown-item" onclick="window.open('tv-highscores', '_blank')"><span>100"-TV Highscores</span><span>↗</span></button>`);
         }
         if (hasPerm('manage_accounts')) {
-            techBtnsHtml += `<button class="${cls('tech-accounts')}" onclick="window.location.href='tech-accounts'">Accounts</button>`;
+            manageMenuItems.push(`<button class="nav-dropdown-item ${activeTab === 'tech-accounts' ? 'item-active' : ''}" onclick="window.location.href='tech-accounts'"><span>Accounts &amp; Rechte</span></button>`);
+        }
+
+        if (manageMenuItems.length > 0) {
+            const manageActive = ['tech-feedback', 'tech-players', 'tech-accounts'].includes(activeTab);
+            const manageBtnClass = manageActive ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
+            const manageCount = hasPerm('view_feedback') ? feedbackDB.length : 0;
+            const manageBadge = manageCount > 0 ? `<span class="badge-nav-count count-gold">${manageCount}</span>` : '';
+
+            primaryTechHtml += `
+                <div class="nav-dropdown">
+                    <button class="${manageBtnClass}" onclick="toggleHeaderDropdown('header-manage-menu', event)">Verwaltung${manageBadge} ▾</button>
+                    <div id="header-manage-menu" class="nav-dropdown-menu hidden" onclick="event.stopPropagation()">
+                        ${manageMenuItems.join('')}
+                    </div>
+                </div>
+            `;
         }
     }
 
-    const userLabel = (isLoggedIn && currentUserAccount && currentUserAccount.display_name)
-        ? ` (${currentUserAccount.display_name})`
-        : '';
+    // Kompakter Account-Button rechts (bündelt Techniker-Modus-Schalter & Logout)
+    let accountMenuHtml = '';
+    if (isLoggedIn) {
+        const displayName = (currentUserAccount && currentUserAccount.display_name) ? currentUserAccount.display_name : 'Account';
+        const roleLabel = (currentUserAccount && currentUserAccount.role_label) ? currentUserAccount.role_label : '';
+        const safeName = displayName.replace(/</g, '&lt;');
+        const safeRole = roleLabel.replace(/</g, '&lt;');
+
+        const techSwitchItem = canUseTechArea
+            ? `<button class="nav-dropdown-item" onclick="toggleTechMode()"><span>Techniker Modus</span><strong style="color:${isTechMode ? '#7ee787' : '#ff7b72'};">${isTechMode ? 'AN' : 'AUS'}</strong></button>`
+            : '';
+
+        accountMenuHtml = `
+            <div class="nav-dropdown">
+                <button class="btn-nav-util" onclick="toggleHeaderDropdown('header-account-menu', event)">${safeName} ▾</button>
+                <div id="header-account-menu" class="nav-dropdown-menu hidden" onclick="event.stopPropagation()">
+                    <div class="nav-dropdown-header">
+                        <strong>${safeName}</strong>
+                        <span>${safeRole || 'Eingeloggt'}</span>
+                    </div>
+                    ${techSwitchItem}
+                    <button class="nav-dropdown-item item-danger" onclick="doLogout()"><span>Logout</span></button>
+                </div>
+            </div>
+        `;
+    }
 
     header.innerHTML = `
         <a href="${OFFICIAL_HOMEPAGE_URL}" class="logo" title="Zur offiziellen Pin&Play Homepage">
             <img src="logo.png" alt="Pin & Play Retro Gaming" class="logo-img">
         </a>
         <div class="quick-actions">
-            <button class="${cls('overview')}" onclick="goHome()">Flipper Übersicht</button>
+            <button class="${cls('overview')}" onclick="goHome()">Übersicht</button>
             <button class="${cls('highscores')}" onclick="window.location.href='highscores'">Highscores</button>
-            ${techBtnsHtml}
-            <button class="btn-nav-page" onclick="toggleTechMode()" id="tech-toggle" style="display: ${canUseTechArea ? 'inline-block' : 'none'};">
-                Techniker Modus: ${isTechMode ? 'AN' : 'AUS'}
-            </button>
-            <button class="btn-nav-util ${isLoggedIn ? '' : 'hidden'}" onclick="doLogout()" id="logout-btn" title="Eingeloggt${userLabel}">
-                Logout${userLabel}
-            </button>
+            ${primaryTechHtml}
+            ${accountMenuHtml}
         </div>
     `;
 }
+
+// --- LOGIN / LOGOUT ---
 
 function ensureLoginModalExists() {
     if (document.getElementById('global-login-modal')) return;
@@ -395,6 +491,12 @@ function checkHashLogin() {
     if (window.location.hash === '#login') {
         if (isLoggedIn) {
             window.location.hash = '';
+            const savedRedirect = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+            if (savedRedirect) {
+                sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+                window.location.href = savedRedirect;
+                return;
+            }
             if (hasAnyAdminAreaAccess()) {
                 localStorage.setItem('pinplay_tech_mode', 'true');
                 window.location.href = 'techniker';
@@ -411,6 +513,13 @@ function closeLoginModal() {
     window.location.hash = '';
     const modal = document.getElementById('global-login-modal');
     if (modal) modal.classList.add('hidden');
+}
+
+function redirectToLoginWithReturn() {
+    try {
+        sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, window.location.href);
+    } catch (e) {}
+    window.location.href = './#login';
 }
 
 async function doLogin() {
@@ -430,17 +539,20 @@ async function doLogin() {
         localStorage.removeItem(CACHE_KEY_STATE);
 
         await loadCurrentUserAccount(data?.user?.id);
-        if (hasAnyAdminAreaAccess()) {
-            localStorage.setItem('pinplay_tech_mode', 'true');
-            window.location.href = 'techniker';
-        } else {
-            localStorage.setItem('pinplay_tech_mode', 'false');
-            window.location.href = './';
+        const canAdmin = hasAnyAdminAreaAccess();
+        localStorage.setItem('pinplay_tech_mode', canAdmin ? 'true' : 'false');
+
+        const savedRedirect = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+        if (savedRedirect) {
+            sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+            window.location.href = savedRedirect;
+            return;
         }
+
+        window.location.href = canAdmin ? 'techniker' : './';
     }
 }
 
-// Logout behält das klassische Browser-Confirm-Popup
 async function doLogout() {
     if (!confirm("Möchtest du dich wirklich ausloggen?")) return;
     await db.auth.signOut();
@@ -486,6 +598,8 @@ function toggleTechMode() {
 
 window.addEventListener('hashchange', checkHashLogin);
 
+// --- CACHE, SESSION & 15-SEKUNDEN-SYNC ---
+
 function saveStateToCache() {
     try {
         localStorage.setItem(CACHE_KEY_STATE, JSON.stringify({
@@ -496,6 +610,7 @@ function saveStateToCache() {
             playersDB,
             partsOrdersDB,
             partsCatalogDB,
+            partsTagsDB,
             accountsDB,
             currentUserAccount,
             hasValidDailyToken,
@@ -517,6 +632,7 @@ function restoreStateFromCache() {
             playersDB = parsed.playersDB || [];
             partsOrdersDB = parsed.partsOrdersDB || [];
             partsCatalogDB = parsed.partsCatalogDB || [];
+            partsTagsDB = parsed.partsTagsDB || [];
             accountsDB = parsed.accountsDB || [];
             currentUserAccount = parsed.currentUserAccount || null;
             hasValidDailyToken = parsed.hasValidDailyToken === true;
@@ -528,7 +644,7 @@ function restoreStateFromCache() {
 }
 
 async function verifyDailyTokenStatus() {
-    if (isLoggedIn) {
+    if (isLoggedIn && hasPerm('no_qr')) {
         hasValidDailyToken = true;
         return;
     }
@@ -572,32 +688,16 @@ async function loadCurrentUserAccount(explicitUserId = null) {
         if (!error && accData) {
             currentUserAccount = accData;
         } else {
-            // Fallback falls Tabelle noch nicht angelegt wurde
-            currentUserAccount = {
-                user_id: uid,
-                display_name: 'Techniker',
-                role_label: 'Admin / Techniker',
-                perm_power_off: true,
-                perm_view_reports: true,
-                perm_manage_reports: true,
-                perm_verify_highscores: true,
-                perm_manage_parts: true,
-                perm_view_feedback: true,
-                perm_manage_players_qr: true,
-                perm_manage_accounts: true
-            };
+            currentUserAccount = null;
         }
     } catch (e) {}
 }
-
-// --- 15-SEKUNDEN-LIVE-SYNC FÜR EINGELOGGTE ACCOUNTS & NUTZER MIT GÜLTIGEM TOKEN ---
 
 function startLiveSyncPolling() {
     if (liveSyncTimer) clearInterval(liveSyncTimer);
     liveSyncTimer = setInterval(async () => {
         if (document.hidden) return;
-        if (!isLoggedIn && !isTechMode && !hasValidDailyToken) return;
-
+        if (!isLoggedIn && !hasValidDailyToken) return;
         try {
             await loadAllDatabaseData();
             renderSharedHeader();
@@ -617,7 +717,12 @@ async function initSharedApp(onBackgroundUpdate = null) {
     checkHashLogin();
 
     if (cacheStatus.loaded) {
-        if (!hasValidDailyToken && localStorage.getItem(DAILY_TOKEN_KEY)) {
+        if (isLoggedIn && !currentUserAccount) {
+            await loadCurrentUserAccount();
+            isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
+            renderSharedHeader();
+        }
+        if (!hasValidDailyToken && (hasPerm('no_qr') || localStorage.getItem(DAILY_TOKEN_KEY))) {
             await verifyDailyTokenStatus();
             saveStateToCache();
         } else {
@@ -630,6 +735,7 @@ async function initSharedApp(onBackgroundUpdate = null) {
             (async () => {
                 await syncSessionInBackground();
                 await loadAllDatabaseData();
+                await verifyDailyTokenStatus();
                 isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
                 renderSharedHeader();
                 if (typeof currentPageUpdateCallback === 'function') currentPageUpdateCallback();
@@ -641,8 +747,8 @@ async function initSharedApp(onBackgroundUpdate = null) {
     }
 
     await syncSessionInBackground();
-    await verifyDailyTokenStatus();
     await loadAllDatabaseData();
+    await verifyDailyTokenStatus();
     isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
     renderSharedHeader();
     setTimeout(restoreScrollPositionIfNeeded, 20);
@@ -664,11 +770,12 @@ async function syncSessionInBackground() {
                 reportsDB = [];
                 partsOrdersDB = [];
                 partsCatalogDB = [];
+                partsTagsDB = [];
                 accountsDB = [];
             } else {
                 localStorage.setItem('pinplay_logged_in', 'true');
-                hasValidDailyToken = true;
                 await loadCurrentUserAccount(data.session.user.id);
+                if (hasPerm('no_qr')) hasValidDailyToken = true;
             }
             renderSharedHeader();
         } else if (isLoggedIn && !currentUserAccount && data.session) {
@@ -685,7 +792,7 @@ async function loadAllDatabaseData() {
 
     const canReadReports = hasPerm('view_reports');
     const canReadFeedback = hasPerm('view_feedback');
-    const canReadParts = hasPerm('manage_parts') || hasPerm('view_reports');
+    const canReadParts = hasPerm('request_parts') || hasPerm('manage_parts') || hasPerm('view_reports');
     const canReadAccounts = hasPerm('manage_accounts');
 
     const queries = [
@@ -697,6 +804,7 @@ async function loadAllDatabaseData() {
         canReadFeedback ? db.from('feedback').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
         canReadParts ? db.from('parts_orders').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
         canReadParts ? db.from('parts_catalog').select('*').order('part_name', { ascending: true }) : Promise.resolve({ data: [] }),
+        canReadParts ? db.from('parts_tags').select('*').order('name', { ascending: true }) : Promise.resolve({ data: [] }),
         canReadAccounts ? db.from('user_accounts').select('*').order('display_name', { ascending: true }) : Promise.resolve({ data: [] })
     ];
 
@@ -709,7 +817,8 @@ async function loadAllDatabaseData() {
     const dbFb = (results[5] && !results[5].error) ? results[5].data : [];
     const dbPartsOrders = (results[6] && !results[6].error) ? results[6].data : [];
     const dbPartsCatalog = (results[7] && !results[7].error) ? results[7].data : [];
-    const dbAccounts = (results[8] && !results[8].error) ? results[8].data : [];
+    const dbPartsTags = (results[8] && !results[8].error) ? results[8].data : [];
+    const dbAccounts = (results[9] && !results[9].error) ? results[9].data : [];
 
     playersDB = (dbPlayers || []).map(pl => ({
         id: pl.id,
@@ -766,10 +875,12 @@ async function loadAllDatabaseData() {
 
     partsOrdersDB = (dbPartsOrders || []).map(o => ({
         id: o.id,
+        partId: o.part_id || null,
         pinballId: o.flipper_id || null,
         reportId: o.report_id || null,
         partName: o.part_name || '',
         quantity: Number(o.quantity || 1),
+        unitPrice: (o.unit_price !== null && o.unit_price !== undefined) ? Number(o.unit_price) : null,
         shopName: o.shop_name || '',
         shopUrl: o.shop_url || '',
         status: o.status || 'benoetigt',
@@ -783,11 +894,18 @@ async function loadAllDatabaseData() {
     partsCatalogDB = (dbPartsCatalog || []).map(c => ({
         id: c.id,
         partName: c.part_name || '',
-        category: c.category || 'Allgemein',
+        tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
         shopName: c.shop_name || '',
         shopUrl: c.shop_url || '',
         partNumber: c.part_number || '',
+        price: (c.price !== null && c.price !== undefined) ? Number(c.price) : null,
+        stockQty: Number(c.stock_qty || 0),
         notes: c.notes || ''
+    }));
+
+    partsTagsDB = (dbPartsTags || []).map(t => ({
+        id: t.id,
+        name: t.name || ''
     }));
 
     accountsDB = dbAccounts || [];
@@ -866,10 +984,7 @@ async function compressImageFile(file, maxDimension = 1600, quality = 0.78) {
                 ctx.drawImage(img, 0, 0, width, height);
 
                 canvas.toBlob((blob) => {
-                    if (!blob) {
-                        resolve(file);
-                        return;
-                    }
+                    if (!blob) { resolve(file); return; }
                     const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
                     const compressedFile = new File([blob], `${baseName}.jpg`, {
                         type: 'image/jpeg',
@@ -908,9 +1023,7 @@ function populatePinballInfoBox(pin, prefix) {
     const imgBox = document.getElementById(`${prefix}-img-box`);
     if (imgBox) {
         const desiredHtml = pin.imgUrl ? `<img src="${pin.imgUrl}" alt="${pin.name}">` : '';
-        if (imgBox.innerHTML !== desiredHtml) {
-            imgBox.innerHTML = desiredHtml;
-        }
+        if (imgBox.innerHTML !== desiredHtml) imgBox.innerHTML = desiredHtml;
     }
 }
 
@@ -1000,18 +1113,21 @@ async function togglePrivatePhoto(boxId, btnId, filePath, showText, hideText, la
 }
 
 async function removeOldLowerPlayerScores(pinballId, playerInitials, keepScoreId, newScoreValue) {
-    const oldEntries = highscoresDB.filter(
-        h => h.pinballId === pinballId &&
-             h.id !== keepScoreId &&
-             isSamePlayerIdentity(h.initials, playerInitials) &&
-             h.score <= newScoreValue
-    );
-
-    for (const oldEntry of oldEntries) {
-        if (oldEntry.beweisfoto) {
-            await db.storage.from('fotos-incoming').remove([oldEntry.beweisfoto]);
+    if (hasPerm('verify_highscores')) {
+        const oldEntries = highscoresDB.filter(
+            h => h.pinballId === pinballId &&
+                 h.id !== keepScoreId &&
+                 isSamePlayerIdentity(h.initials, playerInitials) &&
+                 h.score <= newScoreValue
+        );
+        for (const oldEntry of oldEntries) {
+            if (oldEntry.beweisfoto) {
+                await db.storage.from('fotos-incoming').remove([oldEntry.beweisfoto]);
+            }
+            await db.from('highscore').delete().eq('id', oldEntry.id);
         }
-        await db.from('highscore').delete().eq('id', oldEntry.id);
+    } else if (hasPerm('auto_verify_highscores') && keepScoreId) {
+        await db.rpc('cleanup_lower_scores_for_entry', { p_keep_id: keepScoreId });
     }
 }
 

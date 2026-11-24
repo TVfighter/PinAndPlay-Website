@@ -124,6 +124,14 @@
             const hint = document.getElementById('hs-photo-selected-hint');
             const file = fileInput && fileInput.files ? fileInput.files[0] : null;
 
+            if (hasPerm('auto_verify_highscores') && !file) {
+                box.classList.remove('photo-missing-error');
+                box.classList.add('photo-selected-ok');
+                hint.style.color = '#7ee787';
+                hint.innerText = '✓ Dein Account verifiziert Highscores automatisch — Beweisfoto ist nicht erforderlich.';
+                return;
+            }
+
             box.classList.remove('photo-missing-error');
             if (file) {
                 box.classList.add('photo-selected-ok');
@@ -494,7 +502,10 @@
             }
 
             // 2. Beweisfoto ist bei ALLEN Highscores zwingend Pflicht
-            if (!file) {
+            const autoVerifyHs = hasPerm('auto_verify_highscores');
+
+            // Beweisfoto ist für alle Accounts ohne Auto-Verifizierung Pflicht
+            if (!autoVerifyHs && !file) {
                 photoBox.classList.remove('photo-selected-ok');
                 photoBox.classList.add('photo-missing-error');
                 photoBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -572,28 +583,36 @@
                     localStorage.setItem(`pinplay_player_pin_${matchedProfile.id}`, activePin);
                 }
 
-                submitBtn.innerText = "⏳ Komprimiere Beweisfoto & sende...";
-                statusEl.style.display = 'block';
-                statusEl.style.color = 'var(--gold-light)';
-                statusEl.innerText = "Beweisfoto wird komprimiert und Highscore übertragen...";
 
-                const uploadedFilePath = await uploadIncomingPhoto('highscore', file);
+                submitBtn.innerText = (!autoVerifyHs && file) ? "⏳ Komprimiere Beweisfoto & sende..." : "⏳ Sende Highscore...";
+            statusEl.style.display = 'block';
+            statusEl.style.color = 'var(--gold-light)';
+            statusEl.innerText = autoVerifyHs ? "Highscore wird direkt verifiziert gespeichert..." : "Beweisfoto wird komprimiert und Highscore übertragen...";
 
-                const { error } = await db.from('highscore').insert([{
-                    flipper_id: pinId,
-                    initials: initials,
-                    score: scoreVal,
-                    verifiziert: false,
-                    beweisfoto: uploadedFilePath
-                }]);
+            // Bei Auto-Verifizierung kein unnötiges Beweisfoto im Storage ablegen
+            const uploadedFilePath = autoVerifyHs ? '' : await uploadIncomingPhoto('highscore', file);
 
-                if (error) throw error;
+            const { data: insertedRows, error } = await db.from('highscore').insert([{
+                flipper_id: pinId,
+                initials: initials,
+                score: scoreVal,
+                verifiziert: autoVerifyHs,
+                beweisfoto: uploadedFilePath
+            }]).select();
 
-                submitBtn.classList.remove('btn-busy');
-                submitBtn.innerText = "✓ Highscore eingereicht!";
-                statusEl.style.color = '#3fb950';
-                statusEl.innerText = "✓ Highscore mit Beweisfoto eingereicht! Er wird nach Prüfung freigeschaltet.";
-                showActionToast(statusEl.innerText, "success");
+            if (error) throw error;
+
+            if (autoVerifyHs && insertedRows && insertedRows.length > 0) {
+                await removeOldLowerPlayerScores(pinId, initials, insertedRows[0].id, scoreVal);
+            }
+
+            submitBtn.classList.remove('btn-busy');
+            submitBtn.innerText = autoVerifyHs ? "✓ Highscore direkt verifiziert!" : "✓ Highscore eingereicht!";
+            statusEl.style.color = '#3fb950';
+            statusEl.innerText = autoVerifyHs
+                ? "✓ Highscore direkt verifiziert in die Rangliste eingetragen!"
+                : "✓ Highscore mit Beweisfoto eingereicht! Er wird nach Prüfung freigeschaltet.";
+            showActionToast(statusEl.innerText, "success");
 
                 document.getElementById('hs-score').value = '';
                 fileInput.value = '';

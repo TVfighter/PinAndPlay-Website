@@ -193,13 +193,14 @@
             try {
                 const uploadedFilePath = await uploadIncomingPhoto('reports', fileInput.files[0]);
 
+               const autoVerifyRep = hasPerm('auto_verify_reports');
                 const { error } = await db.from('reports').insert([{
                     flipper_id: currentPinball.id,
                     meldung: desc,
                     intensitaet: null,
                     status: 'offen',
                     email: email,
-                    verifiziert: false,
+                    verifiziert: autoVerifyRep,
                     foto_url: uploadedFilePath,
                     merge_count: 1
                 }]);
@@ -208,10 +209,15 @@
 
                 await loadAllDatabaseData();
                 submitBtn.classList.remove('btn-busy');
-                submitBtn.innerText = "✓ Defekt erfolgreich gemeldet!";
+                submitBtn.innerText = autoVerifyRep ? "✓ Defekt direkt verifiziert gemeldet!" : "✓ Defekt erfolgreich gemeldet!";
                 statusEl.style.color = '#3fb950';
-                statusEl.innerText = "✓ Defekt erfolgreich gemeldet!";
-                showActionToast(`✓ Defekt für „${currentPinball.name}“ wurde gemeldet!`, "success");
+                statusEl.innerText = submitBtn.innerText;
+                showActionToast(
+                    autoVerifyRep
+                        ? `✓ Defekt für „${currentPinball.name}“ wurde direkt verifiziert eingetragen!`
+                        : `✓ Defekt für „${currentPinball.name}“ wurde gemeldet!`,
+                    "success"
+                );
 
                 document.getElementById('report-desc').value = '';
                 document.getElementById('report-email').value = '';

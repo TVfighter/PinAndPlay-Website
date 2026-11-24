@@ -294,8 +294,7 @@
             statusBtn.innerText = "Status: " + currentPinball.status;
             statusBtn.className = "btn-status-tech " + getStatusColorClass(currentPinball.status);
             document.getElementById('tech-detail-power').style.display = hasPerm('power_off') ? 'inline-block' : 'none';
-            statusBtn.style.display = hasPerm('manage_reports') ? 'inline-block' : 'none';
-        }
+            statusBtn.style.display = hasPerm('power_off') ? 'inline-block' : 'none';        }
 
         function goToTechHighscoreSubmit() {
             if (!currentPinball) return;
@@ -450,6 +449,13 @@
                 hsBanner.classList.remove('hidden');
                 listContainer.classList.add('reports-list-highscore-wrapper');
                 addBtn.innerText = '+ Neuer Highscore';
+            }
+            tabOpen.classList.toggle('hidden', !hasPerm('view_reports'));
+            tabRes.classList.toggle('hidden', !hasPerm('view_reports'));
+            if (currentReportStatusView !== 'highscore') {
+                addBtn.classList.toggle('hidden', !hasPerm('manage_reports'));
+            } else {
+                addBtn.classList.remove('hidden');
             }
         }
 
@@ -790,7 +796,7 @@
                     ? `<button class="btn-switch" onclick="openMergeReportModal(${r.id})" title="Diese Meldung an eine andere anhängen">An andere anhängen</button>`
                     : '';
 
-                const partsBtnHtml = (hasPerm('manage_parts') && r.status === 'offen')
+               const partsBtnHtml = (hasPerm('request_parts') && r.status === 'offen')
                     ? `<button class="btn-yellow" onclick="window.location.href='tech-parts?add=1&pin=${currentPinball.id}&report=${r.id}'">+ Ersatzteil</button>`
                     : '';
 
@@ -1181,10 +1187,8 @@
             const initialTab = params.get('tab') || 'offen';
 
             await initSharedApp(() => {
-                if (!isLoggedIn) {
-                    window.location.href = './#login';
-                    return;
-                }
+                if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+                if (!hasAnyAdminAreaAccess()) { window.location.href = `detail?id=${pinId}`; return; }
                 currentPinball = pinballs.find(p => p.id === pinId);
                 if (currentPinball) {
                     renderTechDetailHeaderAndInfo();
@@ -1193,7 +1197,11 @@
             });
 
             if (!isLoggedIn) {
-                window.location.href = './#login';
+                redirectToLoginWithReturn();
+                return;
+            }
+            if (!hasAnyAdminAreaAccess()) {
+                window.location.href = `detail?id=${pinId}`;
                 return;
             }
             if (!isTechMode) {
@@ -1209,7 +1217,11 @@
             }
 
             renderTechDetailHeaderAndInfo();
-            switchReportStatusView(['offen', 'behoben', 'highscore'].includes(initialTab) ? initialTab : 'offen');
+            const fallbackTab = hasPerm('view_reports') ? 'offen' : 'highscore';
+            const startTab = (['offen', 'behoben'].includes(initialTab) && hasPerm('view_reports'))
+                ? initialTab
+                : (initialTab === 'highscore' ? 'highscore' : fallbackTab);
+            switchReportStatusView(startTab);
         });
     </script>
 </body>

@@ -102,32 +102,37 @@
             renderFeedbackList();
         }
 
-        window.addEventListener('DOMContentLoaded', async () => {
-            await initSharedApp(() => {
-                if (!isLoggedIn) {
-                    window.location.href = './#login';
-                    return;
-                }
-                if (!hasPerm('view_feedback')) {
-                    showActionToast("Keine Berechtigung für Spieler-Feedback.", "error");
-                    window.location.href = './';
-                    return;
-                }
-                renderFeedbackList();
-            });
+       window.addEventListener('DOMContentLoaded', async () => {
+    await initSharedApp(() => {
+        if (!isLoggedIn) {
+            redirectToLoginWithReturn();
+            return;
+        }
+        if (!hasPerm('view_feedback')) {
+            showActionToast("Keine Berechtigung für Spieler-Feedback.", "error");
+            window.location.href = './';
+            return;
+        }
+        renderFeedbackList();
+    });
 
-            if (!isLoggedIn) {
-                window.location.href = './#login';
-                return;
-            }
-            if (!isTechMode) {
-                isTechMode = true;
-                localStorage.setItem('pinplay_tech_mode', 'true');
-                renderSharedHeader();
-            }
+    if (!isLoggedIn) {
+        redirectToLoginWithReturn();
+        return;
+    }
+    if (!hasPerm('view_feedback')) {
+        showActionToast("Keine Berechtigung für Spieler-Feedback.", "error");
+        window.location.href = './';
+        return;
+    }
+    if (!isTechMode) {
+        isTechMode = true;
+        localStorage.setItem('pinplay_tech_mode', 'true');
+        renderSharedHeader();
+    }
 
-            renderFeedbackList();
-        });
+    renderFeedbackList();
+});
     </script>
 </body>
 </html>

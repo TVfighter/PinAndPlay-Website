@@ -325,7 +325,7 @@
             const createdStr = formatDateTime(r.date);
             const resolvedStr = formatDateTime(r.behobenAm || r.date);
             const canManage = hasPerm('manage_reports');
-            const canParts = hasPerm('manage_parts');
+            const canParts = hasPerm('request_parts');
 
             let prioColor = 'var(--gold-mid)', prioBadge = '<span class="badge-prio badge-prio-0">PRIO OFFEN</span>';
             if (r.prio === 1) { prioColor = 'var(--status-red)'; prioBadge = '<span class="badge-prio badge-prio-1">PRIO 1 — UNSPIELBAR</span>'; }
@@ -740,30 +740,31 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
-            const params = new URLSearchParams(window.location.search);
-            const urlTab = params.get('tab');
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get('tab');
 
-            await initSharedApp(() => {
-                if (!hasPerm('view_reports') && !hasPerm('verify_highscores')) { window.location.href = './'; return; }
-                renderFeedContent();
-            });
+    await initSharedApp(() => {
+        if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+        if (!hasPerm('view_reports') && !hasPerm('verify_highscores')) { window.location.href = './'; return; }
+        renderFeedContent();
+    });
 
-            if (!isLoggedIn) { window.location.href = './#login'; return; }
-            if (!hasPerm('view_reports') && !hasPerm('verify_highscores')) {
-                showActionToast("Keine Berechtigung für den News-Feed.", "error");
-                window.location.href = './';
-                return;
-            }
-            if (!isTechMode && hasAnyAdminAreaAccess()) {
-                isTechMode = true; localStorage.setItem('pinplay_tech_mode', 'true'); renderSharedHeader();
-            }
+    if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+    if (!hasPerm('view_reports') && !hasPerm('verify_highscores')) {
+        showActionToast("Keine Berechtigung für den News-Feed.", "error");
+        window.location.href = './';
+        return;
+    }
+    if (!isTechMode && hasAnyAdminAreaAccess()) {
+        isTechMode = true; localStorage.setItem('pinplay_tech_mode', 'true'); renderSharedHeader();
+    }
 
-            populatePinballFilter();
-            const startTab = ['unverifiziert', 'offen', 'behoben', 'highscore'].includes(urlTab)
-                ? urlTab
-                : 'unverifiziert';
-            switchFeedTab(startTab);
-        });
+    populatePinballFilter();
+    const startTab = ['unverifiziert', 'offen', 'behoben', 'highscore'].includes(urlTab)
+        ? urlTab
+        : 'unverifiziert';
+    switchFeedTab(startTab);
+});
     </script>
 </body>
 </html>

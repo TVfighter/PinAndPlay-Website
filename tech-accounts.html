@@ -21,7 +21,7 @@
         </div>
 
         <p style="font-size: 14px; color: var(--text-muted); margin-top: 0; margin-bottom: 20px; line-height: 1.5;">
-            Jeder eingeloggte Account benötigt automatisch <strong>kein Tages-QR-Code-Ticket</strong> mehr und darf Flipper anschalten, Highscores, Defekte und Feedback einreichen. Über die Checkboxen unten vergibst du jedem Account gezielt zusätzliche Rechte.
+            Verwalte hier alle Accounts und ihre exakten Datenbank-Berechtigungen. Über die Slider und Schalter legst du pro Account genau fest, was er sehen, automatisch verifizieren oder bearbeiten darf.
         </p>
 
         <div id="accounts-list-container"></div>
@@ -29,7 +29,7 @@
 
     <!-- MODAL: ACCOUNT ERSTELLEN / BEARBEITEN -->
     <div id="account-modal" class="modal-overlay hidden" onclick="if(event.target.id==='account-modal') closeAccountModal()">
-        <div class="modal-box" style="max-width: 660px;">
+        <div class="modal-box" style="max-width: 700px;">
             <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
                 <h3 id="acc-modal-title" style="margin: 0;">Neuen Account erstellen</h3>
                 <button class="btn-switch" onclick="closeAccountModal()">Abbrechen</button>
@@ -42,59 +42,103 @@
                     </div>
                     <div style="flex:1; min-width:180px;">
                         <label><strong>Rollen-Bezeichnung</strong></label>
-                        <input type="text" id="acc-role" placeholder="z.B. Mitglied, Aufsicht, Techniker">
+                        <input type="text" id="acc-role" placeholder="z.B. Stammspieler, Aufsicht, Techniker">
                     </div>
                 </div>
 
-                <label><strong>Login-Kennung (E-Mail-Format) *</strong></label>
-                <input type="email" id="acc-email" placeholder="z.B. max@pinplay.lokal">
+                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:220px;">
+                        <label><strong>Login-Kennung (E-Mail-Format) *</strong></label>
+                        <input type="email" id="acc-email" placeholder="z.B. max@pinplay.lokal">
+                    </div>
+                    <div style="flex:1; min-width:200px;">
+                        <label><strong id="acc-pwd-label">Passwort (mind. 6 Zeichen) *</strong></label>
+                        <input type="password" id="acc-pwd" placeholder="Passwort eingeben...">
+                    </div>
+                </div>
 
-                <label><strong id="acc-pwd-label">Passwort (mind. 6 Zeichen) *</strong></label>
-                <input type="password" id="acc-pwd" placeholder="Passwort eingeben...">
-
-                <div style="margin-bottom: 10px;">
-                    <div style="font-size: 13px; font-weight: bold; color: var(--gold-light); margin-bottom: 6px;">Schnell-Vorlagen für Berechtigungen:</div>
+                <!-- SCHNELL-VORLAGEN -->
+                <div style="margin-bottom: 14px;">
+                    <div style="font-size: 13px; font-weight: bold; color: var(--gold-light); margin-bottom: 6px;">Schnell-Vorlagen:</div>
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button type="button" class="btn-switch" onclick="applyRolePreset('member')">Stammspieler (Nur ohne QR)</button>
+                        <button type="button" class="btn-switch" onclick="applyRolePreset('member')">Stammspieler (Kein QR)</button>
+                        <button type="button" class="btn-switch" onclick="applyRolePreset('trusted')">Vertrauens-Spieler (Auto-Verify)</button>
                         <button type="button" class="btn-switch" onclick="applyRolePreset('helper')">Aufsicht / Helfer</button>
                         <button type="button" class="btn-switch" onclick="applyRolePreset('tech')">Techniker</button>
-                        <button type="button" class="btn-yellow" onclick="applyRolePreset('admin')">Voll-Admin</button>
+                        <button type="button" class="btn-yellow" onclick="applyRolePreset('admin')">Admin (Alles)</button>
                     </div>
                 </div>
 
-                <div style="font-size: 13px; font-weight: bold; color: var(--gold-light); margin: 14px 0 8px 0;">Einzelberechtigungen:</div>
+                <!-- ADMIN-HAUPTSCHALTER -->
+                <label class="perm-checkbox-card" style="margin-bottom: 14px; border-color: var(--gold-mid); background: rgba(212,175,55,0.1);">
+                    <input type="checkbox" id="p-admin" onchange="onAdminToggle()">
+                    <div>
+                        <strong style="color:var(--gold-light);">🔑 Admin (Vollzugriff &amp; Accounts verwalten)</strong><br>
+                        <span style="font-size:12px; color:var(--text-muted);">Erhält automatisch alle Rechte und darf neue Accounts anlegen, ändern &amp; löschen.</span>
+                    </div>
+                </label>
+
+                <!-- 1. 4-POSITIONEN-SLIDER: MELDUNGEN / DEFEKTE -->
+                <div class="perm-slider-card">
+                    <div class="perm-slider-header">
+                        <strong>🛠️ Zugriff auf Defekt-Meldungen (4 Stufen)</strong>
+                        <span id="slider-rep-badge" class="perm-slider-badge">Stufe 0: Normal</span>
+                    </div>
+                    <input type="range" id="slider-reports" class="perm-range-input" min="0" max="3" step="1" value="0" oninput="updateSlidersUI()">
+                    <div class="perm-slider-steps steps-4">
+                        <div id="rep-step-0" class="perm-slider-step" onclick="setSliderVal('slider-reports', 0)">0: Normal<br>(Unverifiziert)</div>
+                        <div id="rep-step-1" class="perm-slider-step" onclick="setSliderVal('slider-reports', 1)">1: Auto-Verifiziert<br>(Eigene sofort OK)</div>
+                        <div id="rep-step-2" class="perm-slider-step" onclick="setSliderVal('slider-reports', 2)">2: Einsehen<br>(Lesend + Auto-OK)</div>
+                        <div id="rep-step-3" class="perm-slider-step" onclick="setSliderVal('slider-reports', 3)">3: Editieren<br>(Vollzugriff)</div>
+                    </div>
+                </div>
+
+                <!-- 2. 3-POSITIONEN-SLIDER: HIGHSCORES -->
+                <div class="perm-slider-card">
+                    <div class="perm-slider-header">
+                        <strong>🏆 Zugriff auf Highscores (3 Stufen)</strong>
+                        <span id="slider-hs-badge" class="perm-slider-badge">Stufe 0: Normal</span>
+                    </div>
+                    <input type="range" id="slider-highscores" class="perm-range-input" min="0" max="2" step="1" value="0" oninput="updateSlidersUI()">
+                    <div class="perm-slider-steps steps-3">
+                        <div id="hs-step-0" class="perm-slider-step" onclick="setSliderVal('slider-highscores', 0)">0: Normal<br>(Foto &amp; Prüfung nötig)</div>
+                        <div id="hs-step-1" class="perm-slider-step" onclick="setSliderVal('slider-highscores', 1)">1: Auto-Verifiziert<br>(Eigene direkt live)</div>
+                        <div id="hs-step-2" class="perm-slider-step" onclick="setSliderVal('slider-highscores', 2)">2: Editieren &amp; Prüfen<br>(Alle prüfen &amp; löschen)</div>
+                    </div>
+                </div>
+
+                <!-- 3. 3-POSITIONEN-SLIDER: ERSATZTEILE & INVENTAR -->
+                <div class="perm-slider-card">
+                    <div class="perm-slider-header">
+                        <strong>🔧 Ersatzteile &amp; Inventar (3 Stufen)</strong>
+                        <span id="slider-parts-badge" class="perm-slider-badge">Stufe 0: Kein Zugriff</span>
+                    </div>
+                    <input type="range" id="slider-parts" class="perm-range-input" min="0" max="2" step="1" value="0" oninput="updateSlidersUI()">
+                    <div class="perm-slider-steps steps-3">
+                        <div id="parts-step-0" class="perm-slider-step" onclick="setSliderVal('slider-parts', 0)">0: Kein Zugriff</div>
+                        <div id="parts-step-1" class="perm-slider-step" onclick="setSliderVal('slider-parts', 1)">1: Teile anfordern<br>(inkl. QR-Nachbestellung)</div>
+                        <div id="parts-step-2" class="perm-slider-step" onclick="setSliderVal('slider-parts', 2)">2: Inventar &amp; Shop editieren<br>(Bestand, Tags, Bestellen)</div>
+                    </div>
+                </div>
+
+                <!-- WEITERE EINZELBERECHTIGUNGEN -->
+                <div style="font-size: 13px; font-weight: bold; color: var(--gold-light); margin: 12px 0 8px 0;">Weitere Berechtigungen:</div>
                 <div class="perm-grid">
                     <label class="perm-checkbox-card">
+                        <input type="checkbox" id="p-no-qr">
+                        <div><strong>🎫 Benötigt keinen QR-Code</strong><br><span style="font-size:12px;color:var(--text-muted);">Darf ohne Tages-QR-Ticket anschalten &amp; einreichen</span></div>
+                    </label>
+                    <label class="perm-checkbox-card">
                         <input type="checkbox" id="p-power-off">
-                        <div><strong>Flipper Power / Status</strong><br><span style="font-size:12px;color:var(--text-muted);">Darf Flipper ausschalten &amp; Alle AN/AUS nutzen</span></div>
+                        <div><strong>⚡ Flipper an/aus &amp; aktiv/inaktiv</strong><br><span style="font-size:12px;color:var(--text-muted);">Power AN/AUS, Alle AN/AUS &amp; Wartungs-Status</span></div>
                     </label>
                     <label class="perm-checkbox-card">
-                        <input type="checkbox" id="p-view-reports">
-                        <div><strong>Defekte ansehen</strong><br><span style="font-size:12px;color:var(--text-muted);">Sieht Meldungen &amp; News-Feed (lesend)</span></div>
+                        <input type="checkbox" id="p-players-qr">
+                        <div><strong>📺 QR-Code, Kürzel &amp; TV-Seite</strong><br><span style="font-size:12px;color:var(--text-muted);">Spieler-Kürzel, Tages-QR &amp; 100"-TV verwalten</span></div>
                     </label>
                     <label class="perm-checkbox-card">
-                        <input type="checkbox" id="p-manage-reports">
-                        <div><strong>Defekte bearbeiten</strong><br><span style="font-size:12px;color:var(--text-muted);">Verifizieren, Prio setzen, Mergen, Behoben, Status</span></div>
-                    </label>
-                    <label class="perm-checkbox-card">
-                        <input type="checkbox" id="p-verify-hs">
-                        <div><strong>Highscores prüfen</strong><br><span style="font-size:12px;color:var(--text-muted);">Beweisfotos prüfen, verifizieren &amp; löschen</span></div>
-                    </label>
-                    <label class="perm-checkbox-card">
-                        <input type="checkbox" id="p-manage-parts">
-                        <div><strong>Ersatzteile &amp; Shops</strong><br><span style="font-size:12px;color:var(--text-muted);">Teile anfordern, bestellen &amp; Katalog pflegen</span></div>
-                    </label>
-                    <label class="perm-checkbox-card">
-                        <input type="checkbox" id="p-view-feedback">
-                        <div><strong>Spieler-Feedback</strong><br><span style="font-size:12px;color:var(--text-muted);">Eingegangenes Feedback lesen &amp; löschen</span></div>
-                    </label>
-                    <label class="perm-checkbox-card">
-                        <input type="checkbox" id="p-manage-players-qr">
-                        <div><strong>Kürzel, QR &amp; TV</strong><br><span style="font-size:12px;color:var(--text-muted);">Spieler-Profile &amp; Tages-QR-Code verwalten</span></div>
-                    </label>
-                    <label class="perm-checkbox-card">
-                        <input type="checkbox" id="p-manage-accounts">
-                        <div><strong>Account-Admin</strong><br><span style="font-size:12px;color:var(--text-muted);">Darf neue Accounts erstellen &amp; Rechte ändern</span></div>
+                        <input type="checkbox" id="p-feedback">
+                        <div><strong>💬 Feedback einsehen &amp; editieren</strong><br><span style="font-size:12px;color:var(--text-muted);">Spieler-Feedback lesen &amp; löschen</span></div>
                     </label>
                 </div>
 
@@ -108,19 +152,79 @@
     <script>
         let editingUserId = null;
 
-        const PERM_LABELS = [
-            ['perm_power_off', '⚡ Power AUS/Massen'],
-            ['perm_view_reports', '👁️ Defekte lesen'],
-            ['perm_manage_reports', '🛠️ Defekte bearbeiten'],
-            ['perm_verify_highscores', '🏆 Highscores prüfen'],
-            ['perm_manage_parts', '🔧 Ersatzteile'],
-            ['perm_view_feedback', '💬 Feedback'],
-            ['perm_manage_players_qr', '📱 Kürzel & QR'],
-            ['perm_manage_accounts', '🔑 Account-Admin']
-        ];
+        const REP_STEP_NAMES = ['Stufe 0: Normal', 'Stufe 1: Auto-Verifiziert', 'Stufe 2: Einsehen', 'Stufe 3: Editieren'];
+        const HS_STEP_NAMES = ['Stufe 0: Normal', 'Stufe 1: Auto-Verifiziert', 'Stufe 2: Editieren & Prüfen'];
+        const PARTS_STEP_NAMES = ['Stufe 0: Kein Zugriff', 'Stufe 1: Teile anfordern', 'Stufe 2: Inventar & Bestellen'];
 
         function escHtml(s) {
             return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function setSliderVal(sliderId, val) {
+            const el = document.getElementById(sliderId);
+            if (!el || el.disabled) return;
+            el.value = String(val);
+            updateSlidersUI();
+        }
+
+        function updateSlidersUI() {
+            const rVal = parseInt(document.getElementById('slider-reports').value, 10);
+            const hVal = parseInt(document.getElementById('slider-highscores').value, 10);
+            const pVal = parseInt(document.getElementById('slider-parts').value, 10);
+
+            document.getElementById('slider-rep-badge').innerText = REP_STEP_NAMES[rVal];
+            document.getElementById('slider-hs-badge').innerText = HS_STEP_NAMES[hVal];
+            document.getElementById('slider-parts-badge').innerText = PARTS_STEP_NAMES[pVal];
+
+            for (let i = 0; i <= 3; i++) document.getElementById(`rep-step-${i}`).classList.toggle('step-active', i === rVal);
+            for (let i = 0; i <= 2; i++) document.getElementById(`hs-step-${i}`).classList.toggle('step-active', i === hVal);
+            for (let i = 0; i <= 2; i++) document.getElementById(`parts-step-${i}`).classList.toggle('step-active', i === pVal);
+        }
+
+        function onAdminToggle() {
+            const isAdmin = document.getElementById('p-admin').checked;
+            const controls = ['slider-reports', 'slider-highscores', 'slider-parts', 'p-no-qr', 'p-power-off', 'p-players-qr', 'p-feedback'];
+            if (isAdmin) {
+                document.getElementById('slider-reports').value = '3';
+                document.getElementById('slider-highscores').value = '2';
+                document.getElementById('slider-parts').value = '2';
+                document.getElementById('p-no-qr').checked = true;
+                document.getElementById('p-power-off').checked = true;
+                document.getElementById('p-players-qr').checked = true;
+                document.getElementById('p-feedback').checked = true;
+            }
+            controls.forEach(id => { document.getElementById(id).disabled = isAdmin; });
+            updateSlidersUI();
+        }
+
+        function buildAccountPermPills(acc) {
+            if (acc.perm_manage_accounts) {
+                return '<span class="perm-tag-pill" style="border-color:var(--gold-mid); color:var(--gold-light);">🔑 Admin (Vollzugriff auf alles)</span>';
+            }
+            const tags = [];
+            if (acc.perm_no_qr) tags.push('🎫 Kein QR-Code nötig');
+            if (acc.perm_power_off) tags.push('⚡ Flipper AN/AUS & Aktiv');
+
+            const repLv = acc.perm_manage_reports ? 3 : (acc.perm_view_reports ? 2 : (acc.perm_auto_verify_reports ? 1 : 0));
+            if (repLv === 3) tags.push('🛠️ Meldungen: Editieren');
+            else if (repLv === 2) tags.push('👁️ Meldungen: Einsehen');
+            else if (repLv === 1) tags.push('✓ Meldungen: Auto-Verify');
+
+            const hsLv = acc.perm_verify_highscores ? 2 : (acc.perm_auto_verify_highscores ? 1 : 0);
+            if (hsLv === 2) tags.push('🏆 Highscores: Editieren');
+            else if (hsLv === 1) tags.push('✓ Highscores: Auto-Verify');
+
+            const partsLv = acc.perm_manage_parts ? 2 : (acc.perm_request_parts ? 1 : 0);
+            if (partsLv === 2) tags.push('🔧 Inventar & Bestellen');
+            else if (partsLv === 1) tags.push('🛒 Teile anfordern');
+
+            if (acc.perm_manage_players_qr) tags.push('📺 QR, Kürzel & TV');
+            if (acc.perm_view_feedback) tags.push('💬 Feedback');
+
+            if (tags.length === 0) {
+                return '<span class="perm-tag-pill" style="color:var(--text-muted);">Nur Basis-Login (Tages-QR erforderlich)</span>';
+            }
+            return tags.map(t => `<span class="perm-tag-pill">${t}</span>`).join('');
         }
 
         function renderAccountsList() {
@@ -134,11 +238,6 @@
 
             container.innerHTML = accountsDB.map(acc => {
                 const isSelf = currentUserAccount && acc.user_id === currentUserAccount.user_id;
-                const activeTags = PERM_LABELS.filter(([k]) => acc[k] === true).map(([, label]) => `<span class="perm-tag-pill">${label}</span>`);
-                const permsHtml = activeTags.length > 0
-                    ? activeTags.join('')
-                    : '<span class="perm-tag-pill" style="color:var(--gold-light);">🎫 Basis-Account (Kein Tages-QR-Code nötig)</span>';
-
                 return `
                     <div class="report-comment" style="border-left: 5px solid ${acc.perm_manage_accounts ? 'var(--gold-mid)' : 'var(--primary-blue)'};">
                         <div class="report-header-bar">
@@ -153,44 +252,55 @@
                                 ${!isSelf ? `<button class="btn-report" onclick="deleteAccount('${acc.user_id}', '${escHtml(acc.display_name).replace(/'/g, "\\'")}')">Löschen</button>` : ''}
                             </div>
                         </div>
-                        <div style="margin-top:6px;">${permsHtml}</div>
+                        <div style="margin-top:6px;">${buildAccountPermPills(acc)}</div>
                     </div>
                 `;
             }).join('');
         }
 
-        function setPermCheckboxes(p) {
-            document.getElementById('p-power-off').checked = !!p.perm_power_off;
-            document.getElementById('p-view-reports').checked = !!p.perm_view_reports;
-            document.getElementById('p-manage-reports').checked = !!p.perm_manage_reports;
-            document.getElementById('p-verify-hs').checked = !!p.perm_verify_highscores;
-            document.getElementById('p-manage-parts').checked = !!p.perm_manage_parts;
-            document.getElementById('p-view-feedback').checked = !!p.perm_view_feedback;
-            document.getElementById('p-manage-players-qr').checked = !!p.perm_manage_players_qr;
-            document.getElementById('p-manage-accounts').checked = !!p.perm_manage_accounts;
+        function applyPermValuesToModal(p) {
+            const isAdmin = !!p.perm_manage_accounts;
+            document.getElementById('p-admin').checked = isAdmin;
+
+            const repLv = isAdmin || p.perm_manage_reports ? 3 : (p.perm_view_reports ? 2 : (p.perm_auto_verify_reports ? 1 : 0));
+            const hsLv = isAdmin || p.perm_verify_highscores ? 2 : (p.perm_auto_verify_highscores ? 1 : 0);
+            const partsLv = isAdmin || p.perm_manage_parts ? 2 : (p.perm_request_parts ? 1 : 0);
+
+            document.getElementById('slider-reports').value = String(repLv);
+            document.getElementById('slider-highscores').value = String(hsLv);
+            document.getElementById('slider-parts').value = String(partsLv);
+
+            document.getElementById('p-no-qr').checked = isAdmin || !!p.perm_no_qr;
+            document.getElementById('p-power-off').checked = isAdmin || !!p.perm_power_off;
+            document.getElementById('p-players-qr').checked = isAdmin || !!p.perm_manage_players_qr;
+            document.getElementById('p-feedback').checked = isAdmin || !!p.perm_view_feedback;
+
+            onAdminToggle();
         }
 
         function applyRolePreset(preset) {
             if (preset === 'member') {
                 document.getElementById('acc-role').value = 'Stammspieler';
-                setPermCheckboxes({});
+                applyPermValuesToModal({ perm_no_qr: true });
+            } else if (preset === 'trusted') {
+                document.getElementById('acc-role').value = 'Vertrauens-Spieler';
+                applyPermValuesToModal({ perm_no_qr: true, perm_auto_verify_reports: true, perm_auto_verify_highscores: true });
             } else if (preset === 'helper') {
                 document.getElementById('acc-role').value = 'Aufsicht / Helfer';
-                setPermCheckboxes({ perm_power_off: true, perm_view_reports: true, perm_verify_highscores: true });
+                applyPermValuesToModal({
+                    perm_no_qr: true, perm_power_off: true, perm_view_reports: true,
+                    perm_verify_highscores: true, perm_request_parts: true
+                });
             } else if (preset === 'tech') {
                 document.getElementById('acc-role').value = 'Techniker';
-                setPermCheckboxes({
-                    perm_power_off: true, perm_view_reports: true, perm_manage_reports: true,
-                    perm_verify_highscores: true, perm_manage_parts: true, perm_view_feedback: true,
-                    perm_manage_players_qr: true, perm_manage_accounts: false
+                applyPermValuesToModal({
+                    perm_no_qr: true, perm_power_off: true, perm_manage_reports: true,
+                    perm_verify_highscores: true, perm_manage_parts: true,
+                    perm_view_feedback: true, perm_manage_players_qr: true, perm_manage_accounts: false
                 });
             } else if (preset === 'admin') {
                 document.getElementById('acc-role').value = 'Admin / Techniker';
-                setPermCheckboxes({
-                    perm_power_off: true, perm_view_reports: true, perm_manage_reports: true,
-                    perm_verify_highscores: true, perm_manage_parts: true, perm_view_feedback: true,
-                    perm_manage_players_qr: true, perm_manage_accounts: true
-                });
+                applyPermValuesToModal({ perm_manage_accounts: true });
             }
         }
 
@@ -208,7 +318,7 @@
                 emailEl.disabled = false;
                 document.getElementById('acc-pwd-label').innerText = 'Passwort (mind. 6 Zeichen) *';
                 pwdEl.placeholder = 'Passwort festlegen...';
-                setPermCheckboxes({});
+                applyPermValuesToModal({ perm_no_qr: true });
             } else {
                 const acc = accountsDB.find(a => a.user_id === userId);
                 if (!acc) return;
@@ -219,7 +329,7 @@
                 emailEl.disabled = true;
                 document.getElementById('acc-pwd-label').innerText = 'Neues Passwort (Leer lassen = unverändert)';
                 pwdEl.placeholder = 'Optional neues Passwort (mind. 6 Zeichen)';
-                setPermCheckboxes(acc);
+                applyPermValuesToModal(acc);
             }
             document.getElementById('account-modal').classList.remove('hidden');
         }
@@ -227,16 +337,24 @@
         function closeAccountModal() { document.getElementById('account-modal').classList.add('hidden'); editingUserId = null; }
 
         function collectPerms() {
-            const manageRep = document.getElementById('p-manage-reports').checked;
+            const isAdmin = document.getElementById('p-admin').checked;
+            const rVal = parseInt(document.getElementById('slider-reports').value, 10);
+            const hVal = parseInt(document.getElementById('slider-highscores').value, 10);
+            const pVal = parseInt(document.getElementById('slider-parts').value, 10);
+
             return {
-                perm_power_off: document.getElementById('p-power-off').checked,
-                perm_view_reports: document.getElementById('p-view-reports').checked || manageRep,
-                perm_manage_reports: manageRep,
-                perm_verify_highscores: document.getElementById('p-verify-hs').checked,
-                perm_manage_parts: document.getElementById('p-manage-parts').checked,
-                perm_view_feedback: document.getElementById('p-view-feedback').checked,
-                perm_manage_players_qr: document.getElementById('p-manage-players-qr').checked,
-                perm_manage_accounts: document.getElementById('p-manage-accounts').checked
+                perm_no_qr: isAdmin || document.getElementById('p-no-qr').checked,
+                perm_power_off: isAdmin || document.getElementById('p-power-off').checked,
+                perm_auto_verify_reports: isAdmin || rVal >= 1,
+                perm_view_reports: isAdmin || rVal >= 2,
+                perm_manage_reports: isAdmin || rVal >= 3,
+                perm_auto_verify_highscores: isAdmin || hVal >= 1,
+                perm_verify_highscores: isAdmin || hVal >= 2,
+                perm_request_parts: isAdmin || pVal >= 1,
+                perm_manage_parts: isAdmin || pVal >= 2,
+                perm_manage_players_qr: isAdmin || document.getElementById('p-players-qr').checked,
+                perm_view_feedback: isAdmin || document.getElementById('p-feedback').checked,
+                perm_manage_accounts: isAdmin
             };
         }
 
@@ -257,7 +375,6 @@
                     if (!email || !email.includes('@')) throw new Error("Bitte gültige E-Mail-Kennung eingeben (z.B. max@pinplay.lokal).");
                     if (!pwd || pwd.length < 6) throw new Error("Passwort muss mindestens 6 Zeichen lang sein.");
 
-                    // Isolierter Client mit persistSession: false, damit deine eigene Admin-Session aktiv bleibt
                     const signupClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
                         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
                     });
@@ -278,7 +395,7 @@
                     });
                     if (rpcErr) throw rpcErr;
 
-                    showActionToast(`✓ Account „${name}“ wurde erstellt und ist sofort nutzbar!`, "success", 4200);
+                    showActionToast(`✓ Account „${name}“ erstellt und sofort einsatzbereit!`, "success", 4200);
                 } else {
                     if (pwd && pwd.length < 6) throw new Error("Neues Passwort muss mindestens 6 Zeichen lang sein.");
                     const { error: updErr } = await db.rpc('admin_update_user_account', {
@@ -318,7 +435,7 @@
                 renderAccountsList();
             });
 
-            if (!isLoggedIn) { window.location.href = './#login'; return; }
+            if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
             if (!hasPerm('manage_accounts')) {
                 showActionToast("Keine Berechtigung für die Account-Verwaltung.", "error");
                 window.location.href = './';

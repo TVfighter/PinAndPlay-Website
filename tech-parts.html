@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pin&Play - Ersatzteile & Shop-Katalog</title>
+    <title>Pin&Play - Inventar & Ersatzteile</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,118 +13,199 @@
         <div class="detail-header">
             <div class="detail-header-left">
                 <button class="btn-back" onclick="navigateBackTo('techniker')" title="Zurück zum Techniker-Dashboard">←</button>
-                <h2 style="margin: 0;">Ersatzteile &amp; Shop-Links</h2>
+                <h2 style="margin: 0;">Ersatzteile, Einkaufsliste &amp; Inventar</h2>
             </div>
             <div class="detail-header-actions">
-                <button id="btn-new-order" class="btn-context-add" onclick="openOrderModal(null)">+ Teil anfordern</button>
-                <button id="btn-new-catalog" class="btn-yellow" onclick="openCatalogModal(null)">+ Teil in Shop-Katalog</button>
+                <button id="btn-request-parts" class="btn-context-add" onclick="openRequestModal()">+ Teile anfordern</button>
+                <button id="btn-register-part" class="btn-yellow" onclick="openPartModal(null)">+ Neues Teil registrieren</button>
             </div>
         </div>
 
         <div class="report-mode-tabs">
-            <button id="ptab-benoetigt" class="report-tab-btn" onclick="switchPartsTab('benoetigt')">
-                Benötigt (<span id="pcnt-benoetigt">0</span>)
+            <button id="ptab-einkaufsliste" class="report-tab-btn" onclick="switchPartsTab('einkaufsliste')">
+                Einkaufsliste (<span id="pcnt-einkaufsliste">0</span>)
             </button>
             <button id="ptab-bestellt" class="report-tab-btn" onclick="switchPartsTab('bestellt')">
                 Bestellt (<span id="pcnt-bestellt">0</span>)
             </button>
-            <button id="ptab-geliefert" class="report-tab-btn" onclick="switchPartsTab('geliefert')">
-                Geliefert / Historie (<span id="pcnt-geliefert">0</span>)
+            <button id="ptab-inventar" class="report-tab-btn" onclick="switchPartsTab('inventar')">
+                Inventar (<span id="pcnt-inventar">0</span>)
             </button>
-            <button id="ptab-katalog" class="report-tab-btn" onclick="switchPartsTab('katalog')">
-                Shop-Katalog (<span id="pcnt-katalog">0</span>)
+            <button id="ptab-historie" class="report-tab-btn" onclick="switchPartsTab('historie')">
+                Geliefert (<span id="pcnt-historie">0</span>)
             </button>
         </div>
 
-        <div class="report-controls" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-            <input type="text" id="parts-search" placeholder="Suche nach Teil, Shop oder Artikelnummer..." oninput="renderPartsView()" style="flex:1; min-width:210px; margin:0; padding:10px; background:var(--surface-input); color:var(--text-main); border:1px solid var(--border-light); border-radius:6px;">
-            <select id="parts-pin-filter" class="bold-sort-select" style="min-width:200px; margin:0;" onchange="renderPartsView()"></select>
+        <!-- SUCH- & TAG-FILTERLEISTE -->
+        <div class="report-controls">
+            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                <input type="text" id="parts-search" placeholder="Suche nach Teil, Teilnummer, Shop, Flipper oder Tag..." oninput="renderPartsView()" style="flex:1; min-width:220px; margin:0; padding:10px; background:var(--surface-input); color:var(--text-main); border:1px solid var(--border-light); border-radius:6px;">
+                <select id="parts-pin-filter" class="bold-sort-select" style="min-width:200px; margin:0;" onchange="renderPartsView()"></select>
+            </div>
+
+            <!-- TAG-SUCHE & FILTER (Im Inventar-Tab) -->
+            <div id="inventory-tag-filter-wrap" class="hidden" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-subtle);">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                    <span style="font-size:13px; font-weight:bold; color:var(--text-muted);">
+                        Nach Tags filtern:
+                        <span id="clear-tag-filters-link" class="hidden" style="color:var(--gold-light); text-decoration:underline; cursor:pointer; margin-left:8px;" onclick="clearTagFilters()">Filter zurücksetzen</span>
+                    </span>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <input type="text" id="tag-filter-search" placeholder="Tags suchen..." oninput="renderInventoryTagChips()" style="width:165px; margin:0; padding:5px 9px; font-size:12px; background:var(--surface-input); color:var(--text-main); border:1px solid var(--border-light); border-radius:4px;">
+                        <button id="btn-quick-new-tag" class="btn-switch" style="padding:5px 10px; font-size:12px;" onclick="promptQuickCreateTag()">+ Neuer Tag</button>
+                    </div>
+                </div>
+                <div id="inventory-tag-chips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+            </div>
         </div>
 
         <div id="parts-list-container"></div>
     </div>
 
-    <!-- MODAL 1: ERSATZTEIL-BESTELLUNG ANLEGEN / BEARBEITEN -->
-    <div id="order-modal" class="modal-overlay hidden" onclick="if(event.target.id==='order-modal') closeOrderModal()">
-        <div class="modal-box" style="max-width: 600px;">
+    <!-- MODAL 1: TEILE ANFORDERN (NUR REGISTRIERTE TEILE, DURCHSUCHBARER DEFEKT + MEHRERE TEILE) -->
+    <div id="request-modal" class="modal-overlay hidden" onclick="if(event.target.id==='request-modal') closeRequestModal()">
+        <div class="modal-box" style="max-width: 650px;">
             <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
-                <h3 id="order-modal-title" style="margin: 0;">Benötigtes Ersatzteil eintragen</h3>
-                <button class="btn-switch" onclick="closeOrderModal()">Abbrechen</button>
+                <h3 style="margin: 0;">Ersatzteile anfordern (Einkaufsliste)</h3>
+                <button class="btn-switch" onclick="closeRequestModal()">Abbrechen</button>
             </div>
             <div class="report-form">
-                <label><strong>Schnellauswahl aus dem Shop-Katalog (Optional)</strong></label>
-                <select id="ord-catalog-pick" onchange="applyCatalogSelection()"></select>
+                <!-- 1. Defekt verknüpfen (Durchsuchbar nach Flippername, Kürzel, Text, Ursache, ID) -->
+                <label><strong>Defekt verknüpfen (Optional — nach Flipper, Kürzel oder Text suchen)</strong></label>
+                <div class="searchable-combo">
+                    <input type="text" id="req-defect-search" placeholder="Tippen zum Suchen (z.B. T2, Centaur, Spule, #14)..." onfocus="openDefectCombo()" oninput="renderDefectComboList()" autocomplete="off">
+                    <div id="req-defect-dropdown" class="searchable-combo-list hidden"></div>
+                </div>
+                <div id="req-selected-defect-box" style="margin-top:-8px; margin-bottom:14px; font-size:13px; color:var(--text-muted);"></div>
 
-                <label><strong>Flipper (oder Allgemein / Lager)</strong></label>
-                <select id="ord-pinball" onchange="updateOrderReportSelect()"></select>
-
-                <label><strong>Verknüpfte Defekt-Meldung (Optional)</strong></label>
-                <select id="ord-report"></select>
-
-                <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                    <div style="flex:3; min-width:200px;">
-                        <label><strong>Bezeichnung des Teils *</strong></label>
-                        <input type="text" id="ord-name" placeholder="z.B. Coilstop Williams A-12390 / Spulenhülse 56mm">
-                    </div>
-                    <div style="flex:1; min-width:90px;">
-                        <label><strong>Menge</strong></label>
-                        <input type="number" id="ord-qty" value="1" min="1">
-                    </div>
+                <!-- Fallback Flipper-Auswahl wenn kein Defekt gewählt wurde -->
+                <div id="req-manual-pin-wrap">
+                    <label><strong>Alternativ: Nur einem Flipper / Lager zuordnen (Optional)</strong></label>
+                    <select id="req-manual-pin"></select>
                 </div>
 
-                <label><strong>Shop-Name (Optional)</strong></label>
-                <input type="text" id="ord-shop-name" list="pinball-shops-list" placeholder="z.B. Pinball Center, PinWitch, PU-Parts, Multiball...">
-
-                <label><strong>Direkter Shop-Link / URL zum Artikel (Optional)</strong></label>
-                <input type="url" id="ord-shop-url" placeholder="https://...">
-
-                <label><strong>Notiz / Artikelnummer (Optional)</strong></label>
-                <textarea id="ord-notes" rows="2" placeholder="z.B. für linken Flipperfinger, gleich 2 auf Reserve..."></textarea>
-
-                <div id="ord-save-catalog-wrap" style="margin-bottom: 14px;">
-                    <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-main);">
-                        <input type="checkbox" id="ord-also-catalog" style="width:auto; margin:0;">
-                        Teil &amp; Shop-URL gleichzeitig dauerhaft im Shop-Katalog speichern
-                    </label>
+                <!-- 2. Mehrere registrierte Teile durchsuchbar hinzufügen -->
+                <label><strong>Registrierte Teile hinzufügen * (Mehrfachauswahl möglich)</strong></label>
+                <div class="searchable-combo">
+                    <input type="text" id="req-part-search" placeholder="Teil suchen nach Name, Nummer, Shop oder Tag..." onfocus="openPartCombo()" oninput="renderPartComboList()" autocomplete="off">
+                    <div id="req-part-dropdown" class="searchable-combo-list hidden"></div>
                 </div>
 
-                <button id="ord-save-btn" class="btn-green" style="width:100%; padding:14px;" onclick="saveOrderModal()">Speichern</button>
+                <div id="req-selected-parts-list" style="margin-bottom: 14px;"></div>
+
+                <label><strong>Notiz zur Anforderung (Optional)</strong></label>
+                <textarea id="req-notes" rows="2" placeholder="z.B. Dringend für Turnier am Wochenende..."></textarea>
+
+                <button id="req-submit-btn" class="btn-green" style="width:100%; padding:14px;" onclick="submitPartRequests()">Auf Einkaufsliste setzen</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL 2: SHOP-KATALOG-EINTRAG ANLEGEN / BEARBEITEN -->
-    <div id="catalog-modal" class="modal-overlay hidden" onclick="if(event.target.id==='catalog-modal') closeCatalogModal()">
-        <div class="modal-box" style="max-width: 580px;">
+    <!-- MODAL 2: TEIL REGISTRIEREN / STAMMDATEN BEARBEITEN -->
+    <div id="part-modal" class="modal-overlay hidden" onclick="if(event.target.id==='part-modal') closePartModal()">
+        <div class="modal-box" style="max-width: 620px;">
             <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
-                <h3 id="cat-modal-title" style="margin: 0;">Shop-Katalog Eintrag</h3>
-                <button class="btn-switch" onclick="closeCatalogModal()">Abbrechen</button>
+                <h3 id="part-modal-title" style="margin: 0;">Neues Teil registrieren</h3>
+                <button class="btn-switch" onclick="closePartModal()">Abbrechen</button>
             </div>
             <div class="report-form">
                 <label><strong>Teilename *</strong></label>
-                <input type="text" id="cat-name" placeholder="z.B. Coilstop WPC / Stern (A-12390)">
+                <input type="text" id="pm-name" placeholder="z.B. Coilstop Williams WPC (A-12390)">
 
                 <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                    <div style="flex:1; min-width:160px;">
-                        <label><strong>Kategorie</strong></label>
-                        <input type="text" id="cat-category" list="parts-categories-list" placeholder="z.B. Mechanik, Spulen, LEDs, Gummis">
+                    <div style="flex:1; min-width:150px;">
+                        <label><strong>Teilnummer (Optional)</strong></label>
+                        <input type="text" id="pm-partno" placeholder="z.B. A-12390 / 515-6308-01">
                     </div>
-                    <div style="flex:1; min-width:160px;">
-                        <label><strong>Artikelnummer (Optional)</strong></label>
-                        <input type="text" id="cat-partno" placeholder="z.B. 515-6308-01">
+                    <div style="flex:1; min-width:120px;">
+                        <label><strong>Preis in € (Optional)</strong></label>
+                        <input type="number" id="pm-price" step="0.01" min="0" placeholder="z.B. 4.95">
+                    </div>
+                    <div style="flex:1; min-width:110px;">
+                        <label><strong>Lagerbestand</strong></label>
+                        <input type="number" id="pm-stock" min="0" value="0">
                     </div>
                 </div>
 
-                <label><strong>Bevorzugter Shop *</strong></label>
-                <input type="text" id="cat-shop-name" list="pinball-shops-list" placeholder="z.B. PinWitch, PU-Parts, Pinball Center, Multiball">
+                <label><strong>Shop (Optional)</strong></label>
+                <input type="text" id="pm-shop" list="pinball-shops-list" placeholder="z.B. Pinball Center, PinWitch, PU-Parts, Multiball...">
 
-                <label><strong>Direkte Produkt-URL *</strong></label>
-                <input type="url" id="cat-shop-url" placeholder="https://...">
+                <label><strong>Shop-Link / Produkt-URL (Optional)</strong></label>
+                <input type="url" id="pm-url" placeholder="https://...">
 
-                <label><strong>Hinweise / Passend für (Optional)</strong></label>
-                <textarea id="cat-notes" rows="2" placeholder="z.B. Passend für alle WPC-95 Flippermechaniken"></textarea>
+                <!-- Multi-Tag-Auswahl + Neuen Tag erstellen -->
+                <div style="background:var(--surface-elevated); border:1px solid var(--border-subtle); border-radius:6px; padding:12px; margin-bottom:14px;">
+                    <label style="display:block; margin-bottom:6px;"><strong>Tags (Optional — mehrere wählbar)</strong></label>
+                    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+                        <input type="text" id="pm-tag-search" placeholder="Tag suchen oder neu anlegen..." oninput="renderModalTagChips()" onkeydown="if(event.key==='Enter'){event.preventDefault(); createTagFromModal();}" style="flex:1; min-width:160px; margin:0; padding:7px 10px;">
+                        <button type="button" class="btn-switch" onclick="createTagFromModal()">+ Tag erstellen</button>
+                    </div>
+                    <div id="pm-tag-chips" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+                </div>
 
-                <button id="cat-save-btn" class="btn-green" style="width:100%; padding:14px;" onclick="saveCatalogModal()">Im Shop-Katalog speichern</button>
+                <label><strong>Notizen / Hinweise (Optional)</strong></label>
+                <textarea id="pm-notes" rows="2" placeholder="z.B. Lagerfach B3, passend für alle WPC-Flippermechaniken..."></textarea>
+
+                <button id="pm-save-btn" class="btn-green" style="width:100%; padding:14px;" onclick="savePartModal()">Teil speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: ONLINESHOP-CHECKOUT PRO SHOP (ALLE LINKS + MANUELLE ABWAHL) -->
+    <div id="checkout-modal" class="modal-overlay hidden" onclick="if(event.target.id==='checkout-modal') closeCheckoutModal()">
+        <div class="modal-box" style="max-width: 680px;">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 id="co-modal-title" style="margin: 0;">Bestellung abschließen</h3>
+                <button class="btn-switch" onclick="closeCheckoutModal()">Schließen</button>
+            </div>
+            <div>
+                <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 14px; line-height: 1.5;">
+                    Öffne unten die direkten Shop-Links, um die Artikel in den Warenkorb des Shops zu legen. Alle Teile sind vorausgewählt — <strong>entferne einfach den Haken</strong> bei Artikeln, die du diesmal nicht mitbestellst.
+                </p>
+
+                <div id="co-items-list" style="margin-bottom: 16px;"></div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; padding:12px 14px; background:var(--surface-elevated); border:1px solid var(--gold-border); border-radius:6px; margin-bottom:15px;">
+                    <span id="co-summary-count" style="font-weight:bold; color:var(--text-main);">0 Artikel ausgewählt</span>
+                    <span id="co-summary-price" style="font-size:17px; font-weight:900; color:var(--gold-light);"></span>
+                </div>
+
+                <button id="co-confirm-btn" class="btn-green" style="width:100%; padding:14px; font-size:15px;" onclick="confirmShopCheckout()">
+                    ✓ Ausgewählte Teile als bestellt markieren
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: QR-CODE DIREKTZUGRIFF FÜR EIN TEIL (?part=ID) -->
+    <div id="qr-part-modal" class="modal-overlay hidden" onclick="if(event.target.id==='qr-part-modal') closeQrPartModal()">
+        <div class="modal-box" style="max-width: 560px;">
+            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+                <h3 id="qrp-title" style="margin: 0;">Ersatzteil</h3>
+                <button class="btn-switch" onclick="closeQrPartModal()">Zum Inventar</button>
+            </div>
+            <div id="qrp-info-box" style="background:var(--surface-elevated); border-left:4px solid var(--gold-mid); padding:12px 14px; border-radius:6px; margin-bottom:16px; font-size:14px; line-height:1.6;"></div>
+
+            <div id="qrp-stock-wrap" style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:var(--surface-elevated); border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:16px;">
+                <strong>Aktueller Lagerbestand:</strong>
+                <div id="qrp-stock-control"></div>
+            </div>
+
+            <div id="qrp-reorder-box" class="report-form">
+                <h3 style="margin:0 0 10px 0; font-size:16px;">Direkt auf die Einkaufsliste setzen</h3>
+                <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+                    <div style="width:110px;">
+                        <label><strong>Menge</strong></label>
+                        <input type="number" id="qrp-qty" value="1" min="1" style="margin-bottom:0;">
+                    </div>
+                    <div style="flex:1; min-width:180px;">
+                        <label><strong>Notiz (Optional)</strong></label>
+                        <input type="text" id="qrp-note" placeholder="z.B. Fach leer / für Flipper XY" style="margin-bottom:0;">
+                    </div>
+                </div>
+                <button id="qrp-order-btn" class="btn-green" style="width:100%; padding:14px; margin-top:14px;" onclick="submitQrQuickReorder()">
+                    🛒 Jetzt nachbestellen (Auf Einkaufsliste)
+                </button>
             </div>
         </div>
     </div>
@@ -134,27 +215,32 @@
         <option value="PinWitch"></option>
         <option value="PU-Parts"></option>
         <option value="Multiball"></option>
-        <option value="pinball-parts.shop"></option>
+        <option value="Pinball Parts"></option>
+        <option value="KMS Handels GmbH"></option>
         <option value="Freddy's Pinball Paradise"></option>
         <option value="Best of Pinball"></option>
-    </datalist>
-
-    <datalist id="parts-categories-list">
-        <option value="Coilstops & Mechanik"></option>
-        <option value="Spulen & Hülsen"></option>
-        <option value="Gummis & Posts"></option>
-        <option value="LEDs & Beleuchtung"></option>
-        <option value="Elektronik & Sicherungen"></option>
-        <option value="Schalter & Optos"></option>
-        <option value="Reinigung & Politur"></option>
     </datalist>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
     <script>
-        let currentPartsTab = 'benoetigt';
-        let editingOrderId = null;
-        let editingCatalogId = null;
+        let currentPartsTab = 'einkaufsliste';
+        let selectedTagFilters = new Set();
+
+        // State für Teile-Anfordern-Modal
+        let selectedDefectId = null;
+        let selectedDefectPinId = null;
+        let selectedRequestParts = []; // [{ partId, quantity }]
+
+        // State für Teil-Registrieren-Modal
+        let editingPartId = null;
+        let modalSelectedTags = new Set();
+
+        // State für Checkout & QR-Modal
+        let checkoutShopName = '';
+        let checkoutOrderIds = [];
+        let checkoutCheckedSet = new Set();
+        let qrActivePartId = null;
 
         function escHtml(s) {
             return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -171,6 +257,32 @@
             if (!pinId) return 'Allgemein / Lager';
             const p = pinballs.find(x => x.id === pinId);
             return p ? p.name : `Flipper #${pinId}`;
+        }
+
+        function getPinShort(pinId) {
+            const p = pinballs.find(x => x.id === pinId);
+            return p ? p.short : '';
+        }
+
+        function getCatalogPart(partId) {
+            return partsCatalogDB.find(c => c.id === partId) || null;
+        }
+
+        function getOrderEffectivePrice(o) {
+            if (o.unitPrice !== null && o.unitPrice !== undefined) return o.unitPrice;
+            const cat = o.partId ? getCatalogPart(o.partId) : null;
+            return cat ? cat.price : null;
+        }
+
+        function getOrderEffectiveUrl(o) {
+            const cat = o.partId ? getCatalogPart(o.partId) : null;
+            return normalizeUrl(o.shopUrl || (cat ? cat.shopUrl : ''));
+        }
+
+        function getOrderEffectiveShop(o) {
+            const cat = o.partId ? getCatalogPart(o.partId) : null;
+            const raw = (o.shopName || (cat ? cat.shopName : '') || '').trim();
+            return raw || 'Ohne Shop-Zuordnung';
         }
 
         function populatePartsPinFilter() {
@@ -190,265 +302,862 @@
             renderPartsView();
         }
 
+        // --- TAG-FILTER IM INVENTAR ---
+
+        function toggleInventoryTagFilter(tagName) {
+            if (selectedTagFilters.has(tagName)) selectedTagFilters.delete(tagName);
+            else selectedTagFilters.add(tagName);
+            renderInventoryTagChips();
+            renderPartsView();
+        }
+
+        function clearTagFilters() {
+            selectedTagFilters.clear();
+            document.getElementById('tag-filter-search').value = '';
+            renderInventoryTagChips();
+            renderPartsView();
+        }
+
+        function getAllUniqueTagNames() {
+            const set = new Set();
+            partsTagsDB.forEach(t => { if (t.name) set.add(t.name); });
+            partsCatalogDB.forEach(c => (c.tags || []).forEach(t => set.add(t)));
+            return Array.from(set).sort((a, b) => a.localeCompare(b, 'de'));
+        }
+
+        function renderInventoryTagChips() {
+            const wrap = document.getElementById('inventory-tag-chips');
+            const q = (document.getElementById('tag-filter-search').value || '').trim().toLowerCase();
+            const allTags = getAllUniqueTagNames().filter(t => !q || t.toLowerCase().includes(q));
+
+            document.getElementById('clear-tag-filters-link').classList.toggle('hidden', selectedTagFilters.size === 0);
+            document.getElementById('btn-quick-new-tag').classList.toggle('hidden', !hasPerm('manage_parts'));
+
+            if (allTags.length === 0) {
+                wrap.innerHTML = '<span style="font-size:12px; color:var(--text-muted);">Keine passenden Tags gefunden.</span>';
+                return;
+            }
+
+            wrap.innerHTML = allTags.map(t => {
+                const active = selectedTagFilters.has(t);
+                const safeArg = t.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `<span class="tag-chip ${active ? 'tag-active' : ''}" onclick="toggleInventoryTagFilter('${safeArg}')"># ${escHtml(t)}</span>`;
+            }).join('');
+        }
+
+        async function createTagInDB(rawName) {
+            const clean = String(rawName || '').trim();
+            if (!clean) return null;
+            const exists = getAllUniqueTagNames().find(t => t.toLowerCase() === clean.toLowerCase());
+            if (exists) return exists;
+
+            const { error } = await db.from('parts_tags').insert([{ name: clean }]);
+            if (error && !String(error.message).includes('duplicate')) {
+                showActionToast("Tag konnte nicht erstellt werden: " + error.message, "error");
+                return null;
+            }
+            await loadAllDatabaseData();
+            return clean;
+        }
+
+        async function promptQuickCreateTag() {
+            if (!hasPerm('manage_parts')) return;
+            const prefill = (document.getElementById('tag-filter-search').value || '').trim();
+            const name = prompt("Name des neuen Tags (z.B. Coilstops, WPC-95, Stern Spike 2):", prefill);
+            if (!name || !name.trim()) return;
+            const created = await createTagInDB(name);
+            if (created) {
+                showActionToast(`✓ Tag „${created}“ erstellt!`, "success");
+                renderInventoryTagChips();
+            }
+        }
+
+        // --- HAUPT-RENDERING DER 4 REITER ---
+
         function renderPartsView() {
-            const canEdit = hasPerm('manage_parts');
-            document.getElementById('btn-new-order').classList.toggle('hidden', !canEdit);
-            document.getElementById('btn-new-catalog').classList.toggle('hidden', !canEdit);
+            const canReq = hasPerm('request_parts');
+            const canManage = hasPerm('manage_parts');
 
-            document.getElementById('pcnt-benoetigt').innerText = partsOrdersDB.filter(x => x.status === 'benoetigt').length;
-            document.getElementById('pcnt-bestellt').innerText = partsOrdersDB.filter(x => x.status === 'bestellt').length;
-            document.getElementById('pcnt-geliefert').innerText = partsOrdersDB.filter(x => x.status === 'geliefert').length;
-            document.getElementById('pcnt-katalog').innerText = partsCatalogDB.length;
+            document.getElementById('btn-request-parts').classList.toggle('hidden', !canReq);
+            document.getElementById('btn-register-part').classList.toggle('hidden', !canManage);
 
-            ['benoetigt', 'bestellt', 'geliefert', 'katalog'].forEach(t => {
+            const openOrders = partsOrdersDB.filter(x => x.status === 'benoetigt');
+            const orderedItems = partsOrdersDB.filter(x => x.status === 'bestellt');
+            const deliveredItems = partsOrdersDB.filter(x => x.status === 'geliefert');
+
+            document.getElementById('pcnt-einkaufsliste').innerText = openOrders.length;
+            document.getElementById('pcnt-bestellt').innerText = orderedItems.length;
+            document.getElementById('pcnt-inventar').innerText = partsCatalogDB.length;
+            document.getElementById('pcnt-historie').innerText = deliveredItems.length;
+
+            ['einkaufsliste', 'bestellt', 'inventar', 'historie'].forEach(t => {
                 document.getElementById(`ptab-${t}`).className = 'report-tab-btn';
             });
-            if (currentPartsTab === 'benoetigt') document.getElementById('ptab-benoetigt').classList.add('active-open');
+            if (currentPartsTab === 'einkaufsliste') document.getElementById('ptab-einkaufsliste').classList.add('active-open');
             else if (currentPartsTab === 'bestellt') document.getElementById('ptab-bestellt').classList.add('active-highscore');
-            else if (currentPartsTab === 'geliefert') document.getElementById('ptab-geliefert').classList.add('active-resolved');
-            else document.getElementById('ptab-katalog').classList.add('active-open');
+            else if (currentPartsTab === 'inventar') document.getElementById('ptab-inventar').classList.add('active-open');
+            else document.getElementById('ptab-historie').classList.add('active-resolved');
 
-            const pinFilterEl = document.getElementById('parts-pin-filter');
-            pinFilterEl.style.display = currentPartsTab === 'katalog' ? 'none' : 'inline-block';
+            const isInv = currentPartsTab === 'inventar';
+            document.getElementById('parts-pin-filter').style.display = isInv ? 'none' : 'inline-block';
+            document.getElementById('inventory-tag-filter-wrap').classList.toggle('hidden', !isInv);
+            if (isInv) renderInventoryTagChips();
 
             const query = (document.getElementById('parts-search').value || '').trim().toLowerCase();
             const container = document.getElementById('parts-list-container');
 
-            if (currentPartsTab === 'katalog') {
-                const list = partsCatalogDB.filter(c =>
-                    !query ||
-                    c.partName.toLowerCase().includes(query) ||
-                    c.shopName.toLowerCase().includes(query) ||
-                    c.category.toLowerCase().includes(query) ||
-                    c.partNumber.toLowerCase().includes(query)
-                );
+            if (isInv) {
+                renderInventoryTab(container, query, canReq, canManage);
+            } else if (currentPartsTab === 'einkaufsliste') {
+                renderShoppingCartTab(container, openOrders, query, canManage);
+            } else if (currentPartsTab === 'bestellt') {
+                renderOrderListTab(container, orderedItems, query, canManage, 'bestellt');
+            } else {
+                renderOrderListTab(container, deliveredItems, query, canManage, 'geliefert');
+            }
+        }
 
-                if (list.length === 0) {
-                    container.innerHTML = '<p style="color:var(--text-muted); padding:15px;"><i>Noch keine Einträge im Shop-Katalog. Lege oben über „+ Teil in Shop-Katalog“ deine häufig genutzten Shop-Links (z.B. Coilstops) an.</i></p>';
-                    return;
-                }
+        // TAB 1: EINKAUFSLISTE (ONLINESHOP-STIL, NACH SHOP GRUPPIERT)
+        function renderShoppingCartTab(container, openOrders, query, canManage) {
+            const pinVal = document.getElementById('parts-pin-filter').value;
+            const filtered = openOrders.filter(o => {
+                if (pinVal === 'none' && o.pinballId !== null) return false;
+                if (pinVal !== 'all' && pinVal !== 'none' && String(o.pinballId) !== String(pinVal)) return false;
+                if (!query) return true;
+                const cat = o.partId ? getCatalogPart(o.partId) : null;
+                const hay = [
+                    o.partName, getOrderEffectiveShop(o), o.notes,
+                    getPinNameOrGeneral(o.pinballId), getPinShort(o.pinballId),
+                    cat ? cat.partNumber : '', cat ? (cat.tags || []).join(' ') : ''
+                ].join(' ').toLowerCase();
+                return hay.includes(query);
+            });
 
-                container.innerHTML = list.map(c => {
-                    const url = normalizeUrl(c.shopUrl);
+            if (filtered.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted); padding:18px;"><i>Die Einkaufsliste ist aktuell leer. Klicke oben auf „+ Teile anfordern“ oder scanne einen Lagerfach-QR-Code.</i></p>';
+                return;
+            }
+
+            // Gruppierung nach Shop
+            const shopGroups = new Map();
+            filtered.forEach(o => {
+                const shop = getOrderEffectiveShop(o);
+                if (!shopGroups.has(shop)) shopGroups.set(shop, []);
+                shopGroups.get(shop).push(o);
+            });
+
+            const sortedShops = Array.from(shopGroups.keys()).sort((a, b) => {
+                if (a === 'Ohne Shop-Zuordnung') return 1;
+                if (b === 'Ohne Shop-Zuordnung') return -1;
+                return a.localeCompare(b, 'de');
+            });
+
+            container.innerHTML = sortedShops.map(shop => {
+                const items = shopGroups.get(shop);
+                let totalSum = 0;
+                let hasAnyPrice = false;
+                items.forEach(it => {
+                    const pr = getOrderEffectivePrice(it);
+                    if (pr !== null) {
+                        totalSum += pr * it.quantity;
+                        hasAnyPrice = true;
+                    }
+                });
+
+                const safeShopArg = shop.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const itemIdsJson = JSON.stringify(items.map(i => i.id));
+                const sumText = hasAnyPrice ? `<span style="color:var(--gold-light); font-weight:800; font-size:15px;">ca. ${formatEuro(totalSum)}</span>` : '';
+
+                const rowsHtml = items.map(o => {
+                    const url = getOrderEffectiveUrl(o);
+                    const pr = getOrderEffectivePrice(o);
+                    const cat = o.partId ? getCatalogPart(o.partId) : null;
+                    const linkedRep = o.reportId ? reportsDB.find(r => r.id === o.reportId) : null;
+                    const pinBadge = o.pinballId
+                        ? `<span class="flipper-origin-badge" onclick="saveCurrentScrollPos(); window.location.href='tech-detail?id=${o.pinballId}&from=tech-parts'">📍 ${escHtml(getPinNameOrGeneral(o.pinballId))}</span>`
+                        : `<span class="perm-tag-pill">📦 Lager / Allgemein</span>`;
+
                     return `
-                        <div class="report-comment" style="border-left: 5px solid var(--primary-blue);">
-                            <div class="report-header-bar">
+                        <div class="report-comment" style="border-left: 4px solid var(--status-red); margin-bottom:10px; background:var(--surface-card);">
+                            <div class="report-header-bar" style="margin-bottom:8px; padding-bottom:8px;">
                                 <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                                    <strong style="font-size:16px; color:var(--gold-light);">${escHtml(c.partName)}</strong>
-                                    <span class="perm-tag-pill">${escHtml(c.category)}</span>
-                                    ${c.partNumber ? `<span class="perm-tag-pill">Art.-Nr.: ${escHtml(c.partNumber)}</span>` : ''}
+                                    ${pinBadge}
+                                    <strong style="font-size:16px; color:var(--text-main);">${o.quantity}× ${escHtml(o.partName)}</strong>
+                                    ${cat && cat.partNumber ? `<span class="perm-tag-pill">Art.-Nr.: ${escHtml(cat.partNumber)}</span>` : ''}
+                                    ${pr !== null ? `<span class="perm-tag-pill" style="color:var(--gold-light);">${formatEuro(pr)} / Stk.</span>` : ''}
                                 </div>
-                                <span style="font-size:13px; color:var(--text-muted);">Shop: <strong style="color:var(--text-main);">${escHtml(c.shopName || '-')}</strong></span>
+                                <span style="font-size:12px; color:var(--text-muted);">${formatDateTime(o.date)}${o.createdBy ? ` • ${escHtml(o.createdBy)}` : ''}</span>
                             </div>
-                            ${c.notes ? `<div style="font-size:14px; color:var(--text-muted); margin-bottom:10px;">${escHtml(c.notes)}</div>` : ''}
-                            <div class="report-actions">
-                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                    ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🔗 Im Shop öffnen (${escHtml(c.shopName || 'Link')})</a>` : ''}
+                            ${linkedRep ? `<div class="report-cause-box" style="margin-top:0; margin-bottom:8px;"><strong>Defekt #${linkedRep.id}:</strong> ${escHtml(linkedRep.text)}</div>` : ''}
+                            ${o.notes ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">Notiz: ${escHtml(o.notes)}</div>` : ''}
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                <div>
+                                    ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🔗 Artikel im Shop öffnen</a>` : '<span style="font-size:12px; color:var(--text-muted);">Kein Shop-Link hinterlegt</span>'}
                                 </div>
-                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                    ${canEdit ? `<button class="btn-green" onclick="orderDirectlyFromCatalog(${c.id})">+ Auf Bestellliste</button>` : ''}
-                                    ${canEdit ? `<button class="btn-switch" onclick="openCatalogModal(${c.id})">Bearbeiten</button>` : ''}
-                                    ${canEdit ? `<button class="btn-report" onclick="deleteCatalogItem(${c.id})">Löschen</button>` : ''}
-                                </div>
+                                ${canManage ? `
+                                    <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                        <div class="stock-stepper">
+                                            <button onclick="adjustOrderQty(${o.id}, -1)" title="Menge verringern">−</button>
+                                            <span style="min-width:24px; text-align:center; font-weight:bold;">${o.quantity}</span>
+                                            <button onclick="adjustOrderQty(${o.id}, 1)" title="Menge erhöhen">+</button>
+                                        </div>
+                                        <button class="btn-report" style="padding:6px 12px; font-size:12px;" onclick="deleteOrder(${o.id})">Entfernen</button>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                     `;
                 }).join('');
-                return;
-            }
 
-            const pinVal = pinFilterEl.value;
-            const orders = partsOrdersDB.filter(o => o.status === currentPartsTab).filter(o => {
+                return `
+                    <div class="shop-group-card">
+                        <div class="shop-group-header">
+                            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                                <h3 style="margin:0; font-size:18px;">🏪 ${escHtml(shop)}</h3>
+                                <span class="perm-tag-pill">${items.length} Position${items.length === 1 ? '' : 'en'}</span>
+                                ${sumText}
+                            </div>
+                            ${canManage ? `
+                                <button class="btn-green" onclick='openShopCheckout("${safeShopArg}", ${itemIdsJson})'>
+                                    🛒 Bei ${escHtml(shop)} bestellen (${items.length})
+                                </button>
+                            ` : ''}
+                        </div>
+                        <div class="shop-group-body">${rowsHtml}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // TAB 2 & 4: BESTELLT & GELIEFERT-HISTORIE
+        function renderOrderListTab(container, list, query, canManage, mode) {
+            const pinVal = document.getElementById('parts-pin-filter').value;
+            const filtered = list.filter(o => {
                 if (pinVal === 'none' && o.pinballId !== null) return false;
                 if (pinVal !== 'all' && pinVal !== 'none' && String(o.pinballId) !== String(pinVal)) return false;
                 if (!query) return true;
-                return (
-                    o.partName.toLowerCase().includes(query) ||
-                    o.shopName.toLowerCase().includes(query) ||
-                    o.notes.toLowerCase().includes(query) ||
-                    getPinNameOrGeneral(o.pinballId).toLowerCase().includes(query)
-                );
+                const hay = [o.partName, getOrderEffectiveShop(o), o.notes, getPinNameOrGeneral(o.pinballId), getPinShort(o.pinballId)].join(' ').toLowerCase();
+                return hay.includes(query);
             });
 
-            if (orders.length === 0) {
-                container.innerHTML = '<p style="color:var(--text-muted); padding:15px;"><i>Keine Ersatzteile in dieser Liste vorhanden.</i></p>';
+            if (filtered.length === 0) {
+                container.innerHTML = `<p style="color:var(--text-muted); padding:15px;"><i>Keine Einträge unter „${mode === 'bestellt' ? 'Bestellt' : 'Geliefert'}“ vorhanden.</i></p>`;
                 return;
             }
 
-            container.innerHTML = orders.map(o => {
-                const url = normalizeUrl(o.shopUrl);
+            container.innerHTML = filtered.map(o => {
+                const url = getOrderEffectiveUrl(o);
+                const shop = getOrderEffectiveShop(o);
+                const pr = getOrderEffectivePrice(o);
                 const linkedRep = o.reportId ? reportsDB.find(r => r.id === o.reportId) : null;
-                const statusBadge = `<span class="badge-part-status part-status-${o.status}">${o.status}</span>`;
                 const pinBadge = o.pinballId
                     ? `<span class="flipper-origin-badge" onclick="saveCurrentScrollPos(); window.location.href='tech-detail?id=${o.pinballId}&from=tech-parts'">📍 ${escHtml(getPinNameOrGeneral(o.pinballId))}</span>`
-                    : `<span class="perm-tag-pill">📦 Allgemein / Lager</span>`;
+                    : `<span class="perm-tag-pill">📦 Lager / Allgemein</span>`;
 
-                let statusBtns = '';
-                if (canEdit) {
-                    if (o.status === 'benoetigt') {
-                        statusBtns += `<button class="btn-yellow" onclick="updateOrderStatus(${o.id}, 'bestellt')">Als bestellt markieren</button>`;
-                    } else if (o.status === 'bestellt') {
-                        statusBtns += `<button class="btn-green" onclick="updateOrderStatus(${o.id}, 'geliefert')">✓ Als geliefert markieren</button>`;
-                        statusBtns += `<button class="btn-switch" onclick="updateOrderStatus(${o.id}, 'benoetigt')">Zurück auf Benötigt</button>`;
+                let btns = '';
+                if (canManage) {
+                    if (mode === 'bestellt') {
+                        if (o.partId) {
+                            btns += `<button class="btn-green" onclick="markOrderDelivered(${o.id}, true)">✓ Geliefert (+${o.quantity} ins Lager)</button>`;
+                        }
+                        btns += `<button class="btn-switch" style="border-color:var(--status-green); color:#7ee787;" onclick="markOrderDelivered(${o.id}, false)">✓ Geliefert (direkt verbaut)</button>`;
+                        btns += `<button class="btn-switch" onclick="updateOrderStatus(${o.id}, 'benoetigt')">Zurück auf Liste</button>`;
                     } else {
-                        statusBtns += `<button class="btn-switch" onclick="updateOrderStatus(${o.id}, 'benoetigt')">Erneut anfordern</button>`;
+                        btns += `<button class="btn-report" onclick="deleteOrder(${o.id})">Löschen</button>`;
                     }
-                    statusBtns += `<button class="btn-switch" onclick="openOrderModal(${o.id})">Bearbeiten</button>`;
-                    statusBtns += `<button class="btn-report" onclick="deleteOrder(${o.id})">Löschen</button>`;
                 }
 
-                const borderCol = o.status === 'benoetigt' ? 'var(--status-red)' : (o.status === 'bestellt' ? 'var(--accent-yellow)' : 'var(--status-green)');
+                const dateLabel = mode === 'bestellt'
+                    ? `Bestellt am ${formatDateTime(o.orderedAt || o.date)}`
+                    : `Geliefert am ${formatDateTime(o.deliveredAt || o.date)}`;
 
                 return `
-                    <div class="report-comment" style="border-left: 5px solid ${borderCol};">
+                    <div class="report-comment" style="border-left: 5px solid ${mode === 'bestellt' ? 'var(--accent-yellow)' : 'var(--status-green)'};">
                         <div class="report-header-bar">
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                                 ${pinBadge}
-                                ${statusBadge}
-                                <strong style="font-size:17px; color:var(--text-main);">${o.quantity}× ${escHtml(o.partName)}</strong>
+                                <span class="badge-part-status part-status-${mode}">${mode}</span>
+                                <strong style="font-size:17px;">${o.quantity}× ${escHtml(o.partName)}</strong>
+                                <span class="perm-tag-pill">🏪 ${escHtml(shop)}</span>
+                                ${pr !== null ? `<span class="perm-tag-pill" style="color:var(--gold-light);">${formatEuro(pr * o.quantity)}</span>` : ''}
                             </div>
-                            <span style="font-size:13px; color:var(--text-muted);">Angelegt am ${formatDateTime(o.date)}${o.createdBy ? ` (${escHtml(o.createdBy)})` : ''}</span>
+                            <span style="font-size:12px; color:var(--text-muted);">${dateLabel}</span>
                         </div>
-                        ${linkedRep ? `<div class="report-cause-box"><strong>Gehört zu Defekt-Meldung:</strong> ${escHtml(linkedRep.text)}</div>` : ''}
-                        ${o.notes ? `<div class="report-body-text" style="font-size:14px; margin-bottom:10px;">${escHtml(o.notes)}</div>` : ''}
+                        ${linkedRep ? `<div class="report-cause-box"><strong>Defekt #${linkedRep.id}:</strong> ${escHtml(linkedRep.text)}</div>` : ''}
+                        ${o.notes ? `<div style="font-size:14px; color:var(--text-muted); margin-bottom:10px;">${escHtml(o.notes)}</div>` : ''}
                         <div class="report-actions">
-                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                                ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🛒 Im Shop bestellen${o.shopName ? ` (${escHtml(o.shopName)})` : ''}</a>` : (o.shopName ? `<span class="perm-tag-pill">Shop: ${escHtml(o.shopName)}</span>` : '')}
-                            </div>
-                            <div style="display:flex; gap:8px; flex-wrap:wrap;">${statusBtns}</div>
+                            <div>${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🔗 Produktlink</a>` : ''}</div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">${btns}</div>
                         </div>
                     </div>
                 `;
             }).join('');
         }
 
-        // --- ORDER MODAL ---
-        function openOrderModal(orderId = null, presetPinId = null, presetReportId = null, presetCatalogId = null) {
-            editingOrderId = orderId;
-            const catSel = document.getElementById('ord-catalog-pick');
-            catSel.innerHTML = '<option value="">— Manuell eingeben oder aus Katalog übernehmen —</option>';
-            partsCatalogDB.forEach(c => {
-                const o = document.createElement('option');
-                o.value = c.id;
-                o.textContent = `${c.partName}${c.shopName ? ` (${c.shopName})` : ''}`;
-                catSel.appendChild(o);
+        // TAB 3: INVENTAR (MIT BESTANDS-STEPPER, MULTI-TAGS, QR-URL & STAMMDATEN-EDIT)
+        function renderInventoryTab(container, query, canReq, canManage) {
+            const list = partsCatalogDB.filter(c => {
+                // Multi-Tag-Filter (Teil muss alle ausgewählten Tags enthalten)
+                for (const reqTag of selectedTagFilters) {
+                    if (!(c.tags || []).includes(reqTag)) return false;
+                }
+                if (!query) return true;
+                const hay = [c.partName, c.partNumber, c.shopName, c.notes, (c.tags || []).join(' ')].join(' ').toLowerCase();
+                return hay.includes(query);
             });
 
-            const pinSel = document.getElementById('ord-pinball');
+            if (list.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted); padding:18px;"><i>Keine passenden Teile im Inventar gefunden. Registriere oben ein neues Teil oder passe die Suche/Tag-Filter an.</i></p>';
+                return;
+            }
+
+            container.innerHTML = list.map(c => {
+                const url = normalizeUrl(c.shopUrl);
+                const qtyClass = c.stockQty <= 0 ? 'stock-zero' : (c.stockQty <= 2 ? 'stock-low' : 'stock-ok');
+                const tagsHtml = (c.tags || []).map(t => {
+                    const safeArg = t.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    return `<span class="tag-chip" onclick="toggleInventoryTagFilter('${safeArg}')"># ${escHtml(t)}</span>`;
+                }).join(' ');
+
+                const stockControlHtml = canManage
+                    ? `
+                        <div class="stock-stepper" title="Lagerbestand direkt anpassen">
+                            <span style="font-size:12px; color:var(--text-muted); margin-right:4px;">Bestand:</span>
+                            <button onclick="adjustPartStock(${c.id}, -1)">−</button>
+                            <span class="stock-qty-badge ${qtyClass}" style="cursor:pointer;" onclick="promptExactStock(${c.id})" title="Klicken für direkte Zahleneingabe">${c.stockQty}</span>
+                            <button onclick="adjustPartStock(${c.id}, 1)">+</button>
+                        </div>
+                    `
+                    : `<span class="perm-tag-pill">Bestand: <strong class="${qtyClass}">${c.stockQty}</strong></span>`;
+
+                return `
+                    <div class="report-comment" style="border-left: 5px solid ${c.stockQty <= 0 ? 'var(--status-red)' : 'var(--primary-blue)'};">
+                        <div class="report-header-bar">
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                <strong style="font-size:17px; color:var(--gold-light);">${escHtml(c.partName)}</strong>
+                                ${c.partNumber ? `<span class="perm-tag-pill">Art.-Nr.: ${escHtml(c.partNumber)}</span>` : ''}
+                                ${c.price !== null ? `<span class="perm-tag-pill" style="color:var(--gold-light);">${formatEuro(c.price)}</span>` : ''}
+                                ${c.shopName ? `<span class="perm-tag-pill">🏪 ${escHtml(c.shopName)}</span>` : ''}
+                            </div>
+                            <div>${stockControlHtml}</div>
+                        </div>
+
+                        ${tagsHtml ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">${tagsHtml}</div>` : ''}
+                        ${c.notes ? `<div style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">${escHtml(c.notes)}</div>` : ''}
+
+                        <div class="report-actions">
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🔗 Im Shop ansehen</a>` : ''}
+                                <button class="btn-switch" onclick="copyPartQrUrl(${c.id})" title="URL für Lagerfach-QR-Code kopieren">📱 QR-Link kopieren</button>
+                            </div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                ${canReq ? `<button class="btn-green" onclick="openRequestModal(null, ${c.id})">+ Anfordern</button>` : ''}
+                                ${canManage ? `<button class="btn-switch" onclick="openPartModal(${c.id})">Teil bearbeiten</button>` : ''}
+                                ${canManage ? `<button class="btn-report" onclick="deleteCatalogPart(${c.id})">Löschen</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function copyPartQrUrl(partId) {
+            const base = window.location.origin + window.location.pathname.replace(/\.html$/, '');
+            const url = `${base}?part=${partId}`;
+            navigator.clipboard.writeText(url);
+            showActionToast(`✓ QR-Code-URL kopiert: ${url}`, "success", 4200);
+        }
+
+        // --- BESTAND EDITIEREN (ART 2 DER BEARBEITUNG) ---
+
+        async function adjustPartStock(partId, delta) {
+            const part = getCatalogPart(partId);
+            if (!part) return;
+            const newQty = Math.max(0, Number(part.stockQty || 0) + delta);
+            await setPartStock(partId, newQty);
+        }
+
+        async function promptExactStock(partId) {
+            const part = getCatalogPart(partId);
+            if (!part) return;
+            const raw = prompt(`Neuen Lagerbestand für „${part.partName}“ eingeben:`, String(part.stockQty));
+            if (raw === null) return;
+            const num = parseInt(raw, 10);
+            if (isNaN(num) || num < 0) { showActionToast("Bitte gültige Zahl (>= 0) eingeben.", "error"); return; }
+            await setPartStock(partId, num);
+        }
+
+        async function setPartStock(partId, newQty) {
+            const { error } = await db.from('parts_catalog').update({ stock_qty: newQty }).eq('id', partId);
+            if (error) { showActionToast("Fehler beim Bestand-Update: " + error.message, "error"); return; }
+            const local = getCatalogPart(partId);
+            if (local) local.stockQty = newQty;
+            saveStateToCache();
+            renderPartsView();
+            if (qrActivePartId === partId) renderQrPartStockControl();
+        }
+
+        // --- TEIL REGISTRIEREN / STAMMDATEN BEARBEITEN (ART 1 DER BEARBEITUNG) ---
+
+        function openPartModal(partId = null) {
+            editingPartId = partId;
+            modalSelectedTags = new Set();
+            document.getElementById('pm-tag-search').value = '';
+
+            if (partId === null) {
+                document.getElementById('part-modal-title').innerText = 'Neues Teil im Inventar registrieren';
+                document.getElementById('pm-name').value = '';
+                document.getElementById('pm-partno').value = '';
+                document.getElementById('pm-price').value = '';
+                document.getElementById('pm-stock').value = '0';
+                document.getElementById('pm-shop').value = '';
+                document.getElementById('pm-url').value = '';
+                document.getElementById('pm-notes').value = '';
+            } else {
+                const p = getCatalogPart(partId);
+                if (!p) return;
+                document.getElementById('part-modal-title').innerText = `Teil bearbeiten: ${p.partName}`;
+                document.getElementById('pm-name').value = p.partName;
+                document.getElementById('pm-partno').value = p.partNumber || '';
+                document.getElementById('pm-price').value = p.price !== null ? String(p.price) : '';
+                document.getElementById('pm-stock').value = String(p.stockQty || 0);
+                document.getElementById('pm-shop').value = p.shopName || '';
+                document.getElementById('pm-url').value = p.shopUrl || '';
+                document.getElementById('pm-notes').value = p.notes || '';
+                (p.tags || []).forEach(t => modalSelectedTags.add(t));
+            }
+            renderModalTagChips();
+            document.getElementById('part-modal').classList.remove('hidden');
+        }
+
+        function closePartModal() { document.getElementById('part-modal').classList.add('hidden'); editingPartId = null; }
+
+        function toggleModalTag(tagName) {
+            if (modalSelectedTags.has(tagName)) modalSelectedTags.delete(tagName);
+            else modalSelectedTags.add(tagName);
+            renderModalTagChips();
+        }
+
+        function renderModalTagChips() {
+            const box = document.getElementById('pm-tag-chips');
+            const q = (document.getElementById('pm-tag-search').value || '').trim().toLowerCase();
+            const merged = new Set(getAllUniqueTagNames());
+            modalSelectedTags.forEach(t => merged.add(t));
+            const sorted = Array.from(merged).sort((a, b) => a.localeCompare(b, 'de'))
+                .filter(t => !q || t.toLowerCase().includes(q) || modalSelectedTags.has(t));
+
+            box.innerHTML = sorted.map(t => {
+                const active = modalSelectedTags.has(t);
+                const safeArg = t.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `<span class="tag-chip ${active ? 'tag-active' : ''}" onclick="toggleModalTag('${safeArg}')">${active ? '✓ ' : '+ '}${escHtml(t)}</span>`;
+            }).join('');
+        }
+
+        async function createTagFromModal() {
+            const inp = document.getElementById('pm-tag-search');
+            const name = inp.value.trim();
+            if (!name) return;
+            const created = await createTagInDB(name);
+            if (created) {
+                modalSelectedTags.add(created);
+                inp.value = '';
+                renderModalTagChips();
+                showActionToast(`✓ Tag „${created}“ hinzugefügt!`, "success");
+            }
+        }
+
+        async function savePartModal() {
+            const name = document.getElementById('pm-name').value.trim();
+            if (!name) { showActionToast("Bitte gib einen Teilenamen ein!", "error"); return; }
+
+            const rawPrice = document.getElementById('pm-price').value.trim();
+            const parsedPrice = rawPrice !== '' ? parseFloat(rawPrice.replace(',', '.')) : null;
+            const stockQty = Math.max(0, parseInt(document.getElementById('pm-stock').value, 10) || 0);
+            const tagsArr = Array.from(modalSelectedTags);
+
+            const payload = {
+                part_name: name,
+                part_number: document.getElementById('pm-partno').value.trim(),
+                shop_name: document.getElementById('pm-shop').value.trim(),
+                shop_url: document.getElementById('pm-url').value.trim(),
+                price: (parsedPrice !== null && !isNaN(parsedPrice)) ? parsedPrice : null,
+                stock_qty: stockQty,
+                tags: tagsArr,
+                category: tagsArr[0] || 'Allgemein',
+                notes: document.getElementById('pm-notes').value.trim()
+            };
+
+            const btn = document.getElementById('pm-save-btn');
+            btn.disabled = true; btn.classList.add('btn-busy');
+            try {
+                const res = editingPartId === null
+                    ? await db.from('parts_catalog').insert([payload])
+                    : await db.from('parts_catalog').update(payload).eq('id', editingPartId);
+                if (res.error) throw res.error;
+
+                closePartModal();
+                showActionToast(`✓ Teil „${name}“ im Inventar gespeichert!`, "success");
+                await loadAllDatabaseData();
+                renderPartsView();
+            } catch (err) {
+                showActionToast("Fehler: " + err.message, "error");
+            } finally {
+                btn.disabled = false; btn.classList.remove('btn-busy');
+            }
+        }
+
+        async function deleteCatalogPart(partId) {
+            const p = getCatalogPart(partId);
+            if (!confirm(`Teil „${p ? p.partName : ''}“ wirklich dauerhaft aus dem Inventar löschen?`)) return;
+            const { error } = await db.from('parts_catalog').delete().eq('id', partId);
+            if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
+            showActionToast("Teil aus dem Inventar gelöscht.", "info");
+            await loadAllDatabaseData();
+            renderPartsView();
+        }
+
+        // --- TEILE ANFORDERN MODAL (DURCHSUCHBARE DEFEKTE + MEHRERE REGISTRIERTE TEILE) ---
+
+        function openRequestModal(presetReportId = null, presetPartId = null, presetPinId = null) {
+            if (partsCatalogDB.length === 0) {
+                showActionToast("Es sind noch keine Teile im Inventar registriert! Bitte zuerst ein Teil registrieren.", "error", 4500);
+                return;
+            }
+            selectedDefectId = null;
+            selectedDefectPinId = null;
+            selectedRequestParts = [];
+
+            document.getElementById('req-defect-search').value = '';
+            document.getElementById('req-part-search').value = '';
+            document.getElementById('req-notes').value = '';
+            document.getElementById('req-defect-dropdown').classList.add('hidden');
+            document.getElementById('req-part-dropdown').classList.add('hidden');
+
+            const pinSel = document.getElementById('req-manual-pin');
             pinSel.innerHTML = '<option value="">Allgemein / Lager (Kein bestimmter Flipper)</option>';
             [...pinballs].sort((a, b) => a.name.localeCompare(b.name, 'de')).forEach(p => {
                 const o = document.createElement('option');
-                o.value = p.id; o.textContent = p.name;
+                o.value = p.id; o.textContent = `${p.short} — ${p.name}`;
                 pinSel.appendChild(o);
             });
+            if (presetPinId) pinSel.value = String(presetPinId);
 
-            document.getElementById('ord-also-catalog').checked = false;
-            document.getElementById('ord-save-catalog-wrap').style.display = orderId ? 'none' : 'block';
-
-            if (orderId === null) {
-                document.getElementById('order-modal-title').innerText = 'Benötigtes Ersatzteil eintragen';
-                pinSel.value = presetPinId ? String(presetPinId) : '';
-                updateOrderReportSelect(presetReportId);
-                document.getElementById('ord-name').value = '';
-                document.getElementById('ord-qty').value = '1';
-                document.getElementById('ord-shop-name').value = '';
-                document.getElementById('ord-shop-url').value = '';
-                document.getElementById('ord-notes').value = '';
-                if (presetCatalogId) {
-                    catSel.value = String(presetCatalogId);
-                    applyCatalogSelection();
-                }
+            if (presetReportId) {
+                selectDefectInModal(Number(presetReportId));
             } else {
-                const t = partsOrdersDB.find(x => x.id === orderId);
-                if (!t) return;
-                document.getElementById('order-modal-title').innerText = 'Ersatzteil bearbeiten';
-                pinSel.value = t.pinballId ? String(t.pinballId) : '';
-                updateOrderReportSelect(t.reportId);
-                document.getElementById('ord-name').value = t.partName;
-                document.getElementById('ord-qty').value = String(t.quantity);
-                document.getElementById('ord-shop-name').value = t.shopName;
-                document.getElementById('ord-shop-url').value = t.shopUrl;
-                document.getElementById('ord-notes').value = t.notes;
+                renderSelectedDefectBox();
             }
-            document.getElementById('order-modal').classList.remove('hidden');
-        }
 
-        function orderDirectlyFromCatalog(catId) {
-            openOrderModal(null, null, null, catId);
-        }
-
-        function applyCatalogSelection() {
-            const catId = Number(document.getElementById('ord-catalog-pick').value);
-            const item = partsCatalogDB.find(c => c.id === catId);
-            if (!item) return;
-            document.getElementById('ord-name').value = item.partName;
-            document.getElementById('ord-shop-name').value = item.shopName;
-            document.getElementById('ord-shop-url').value = item.shopUrl;
-            if (!document.getElementById('ord-notes').value.trim()) {
-                document.getElementById('ord-notes').value = item.partNumber ? `Art.-Nr.: ${item.partNumber}` : item.notes;
+            if (presetPartId) {
+                addPartToRequestList(Number(presetPartId));
+            } else {
+                renderSelectedRequestParts();
             }
+
+            document.getElementById('request-modal').classList.remove('hidden');
         }
 
-        function updateOrderReportSelect(presetReportId = null) {
-            const pinId = Number(document.getElementById('ord-pinball').value);
-            const repSel = document.getElementById('ord-report');
-            repSel.innerHTML = '<option value="">Keine bestimmte Meldung verknüpft</option>';
-            if (!pinId) return;
-            reportsDB.filter(r => r.pinballId === pinId && r.status === 'offen').forEach(r => {
-                const o = document.createElement('option');
-                o.value = r.id;
-                o.textContent = `#${r.id}: ${r.text.substring(0, 75)}`;
-                repSel.appendChild(o);
+        function closeRequestModal() {
+            document.getElementById('request-modal').classList.add('hidden');
+            document.getElementById('req-defect-dropdown').classList.add('hidden');
+            document.getElementById('req-part-dropdown').classList.add('hidden');
+        }
+
+        function openDefectCombo() {
+            document.getElementById('req-part-dropdown').classList.add('hidden');
+            renderDefectComboList();
+            document.getElementById('req-defect-dropdown').classList.remove('hidden');
+        }
+
+        function renderDefectComboList() {
+            const box = document.getElementById('req-defect-dropdown');
+            const q = (document.getElementById('req-defect-search').value || '').trim().toLowerCase();
+            const openReps = reportsDB.filter(r => r.status === 'offen');
+
+            if (openReps.length === 0) {
+                box.innerHTML = '<div class="searchable-combo-item" style="color:var(--text-muted);">Keine offenen Defekte verfügbar (nutze unten die Flipper-Auswahl).</div>';
+                return;
+            }
+
+            const matches = openReps.filter(r => {
+                if (!q) return true;
+                const pin = pinballs.find(p => p.id === r.pinballId);
+                const hay = [
+                    `#${r.id}`, r.id, r.text, r.ursache, r.email,
+                    pin ? pin.name : '', pin ? pin.short : '', pin ? pin.maker : ''
+                ].join(' ').toLowerCase();
+                return hay.includes(q);
+            }).slice(0, 30);
+
+            if (matches.length === 0) {
+                box.innerHTML = '<div class="searchable-combo-item" style="color:var(--text-muted);">Kein passender Defekt gefunden.</div>';
+                return;
+            }
+
+            box.innerHTML = matches.map(r => {
+                const pinName = getPinNameOrGeneral(r.pinballId);
+                const pinShort = getPinShort(r.pinballId);
+                const snippet = r.text.length > 85 ? r.text.substring(0, 85) + '...' : r.text;
+                return `
+                    <div class="searchable-combo-item" onclick="selectDefectInModal(${r.id})">
+                        <strong style="color:var(--gold-light);">[${escHtml(pinShort)}] ${escHtml(pinName)}</strong>
+                        <span style="color:var(--text-muted);">(#${r.id})</span><br>
+                        <span>${escHtml(snippet)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectDefectInModal(reportId) {
+            const rep = reportsDB.find(r => r.id === reportId);
+            if (!rep) return;
+            selectedDefectId = rep.id;
+            selectedDefectPinId = rep.pinballId;
+            document.getElementById('req-defect-search').value = '';
+            document.getElementById('req-defect-dropdown').classList.add('hidden');
+            renderSelectedDefectBox();
+        }
+
+        function clearSelectedDefect() {
+            selectedDefectId = null;
+            selectedDefectPinId = null;
+            renderSelectedDefectBox();
+        }
+
+        function renderSelectedDefectBox() {
+            const box = document.getElementById('req-selected-defect-box');
+            const manualWrap = document.getElementById('req-manual-pin-wrap');
+            if (!selectedDefectId) {
+                box.innerHTML = '<i>Kein Defekt verknüpft.</i>';
+                manualWrap.classList.remove('hidden');
+                return;
+            }
+            const rep = reportsDB.find(r => r.id === selectedDefectId);
+            manualWrap.classList.add('hidden');
+            box.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; background:rgba(212,175,55,0.12); border:1px solid var(--gold-mid); border-radius:6px;">
+                    <div>
+                        <strong style="color:var(--gold-light);">Verknüpfter Defekt #${rep.id} (${escHtml(getPinNameOrGeneral(rep.pinballId))}):</strong><br>
+                        <span style="color:var(--text-main);">${escHtml(rep.text.substring(0, 120))}</span>
+                    </div>
+                    <button type="button" class="btn-switch" style="padding:4px 9px;" onclick="clearSelectedDefect()">✕</button>
+                </div>
+            `;
+        }
+
+        function openPartCombo() {
+            document.getElementById('req-defect-dropdown').classList.add('hidden');
+            renderPartComboList();
+            document.getElementById('req-part-dropdown').classList.remove('hidden');
+        }
+
+        function renderPartComboList() {
+            const box = document.getElementById('req-part-dropdown');
+            const q = (document.getElementById('req-part-search').value || '').trim().toLowerCase();
+
+            const matches = partsCatalogDB.filter(c => {
+                if (!q) return true;
+                const hay = [c.partName, c.partNumber, c.shopName, c.notes, (c.tags || []).join(' ')].join(' ').toLowerCase();
+                return hay.includes(q);
+            }).slice(0, 30);
+
+            if (matches.length === 0) {
+                box.innerHTML = '<div class="searchable-combo-item" style="color:var(--text-muted);">Kein registriertes Teil gefunden.</div>';
+                return;
+            }
+
+            box.innerHTML = matches.map(c => {
+                const tagsStr = (c.tags || []).map(t => `#${t}`).join(' ');
+                return `
+                    <div class="searchable-combo-item" onclick="addPartToRequestList(${c.id})">
+                        <div style="display:flex; justify-content:space-between; gap:8px;">
+                            <strong style="color:var(--gold-light);">${escHtml(c.partName)}</strong>
+                            <span style="font-size:12px; color:var(--text-muted);">Bestand: ${c.stockQty}</span>
+                        </div>
+                        <div style="font-size:12px; color:var(--text-muted);">
+                            ${c.partNumber ? `Art.-Nr.: ${escHtml(c.partNumber)} • ` : ''}
+                            ${c.shopName ? `Shop: ${escHtml(c.shopName)}` : 'Ohne Shop'}
+                            ${c.price !== null ? ` • ${formatEuro(c.price)}` : ''}
+                            ${tagsStr ? ` • ${escHtml(tagsStr)}` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addPartToRequestList(partId) {
+            const existing = selectedRequestParts.find(x => x.partId === partId);
+            if (existing) existing.quantity += 1;
+            else selectedRequestParts.push({ partId, quantity: 1 });
+            document.getElementById('req-part-search').value = '';
+            document.getElementById('req-part-dropdown').classList.add('hidden');
+            renderSelectedRequestParts();
+        }
+
+        function updateRequestPartQty(partId, val) {
+            const item = selectedRequestParts.find(x => x.partId === partId);
+            if (item) item.quantity = Math.max(1, parseInt(val, 10) || 1);
+        }
+
+        function removeRequestPart(partId) {
+            selectedRequestParts = selectedRequestParts.filter(x => x.partId !== partId);
+            renderSelectedRequestParts();
+        }
+
+        function renderSelectedRequestParts() {
+            const box = document.getElementById('req-selected-parts-list');
+            if (selectedRequestParts.length === 0) {
+                box.innerHTML = '<div style="font-size:13px; color:var(--text-muted); padding:8px 0;"><i>Noch keine Teile ausgewählt. Suche oben im Feld nach registrierten Teilen und klicke sie an.</i></div>';
+                return;
+            }
+
+            box.innerHTML = selectedRequestParts.map(item => {
+                const c = getCatalogPart(item.partId);
+                if (!c) return '';
+                return `
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 10px; background:var(--surface-elevated); border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:6px;">
+                        <div style="flex:1;">
+                            <strong style="color:var(--text-main);">${escHtml(c.partName)}</strong>
+                            <div style="font-size:12px; color:var(--text-muted);">${escHtml(c.shopName || 'Ohne Shop')}${c.price !== null ? ` • ${formatEuro(c.price)}` : ''}</div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="number" min="1" value="${item.quantity}" onchange="updateRequestPartQty(${c.id}, this.value)" style="width:68px; margin:0; padding:6px;">
+                            <button type="button" class="btn-report" style="padding:6px 10px;" onclick="removeRequestPart(${c.id})">✕</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function submitPartRequests() {
+            if (selectedRequestParts.length === 0) {
+                showActionToast("Bitte wähle mindestens ein registriertes Teil aus!", "error");
+                return;
+            }
+
+            const manualPinRaw = document.getElementById('req-manual-pin').value;
+            const finalPinId = selectedDefectId ? selectedDefectPinId : (manualPinRaw ? Number(manualPinRaw) : null);
+            const notes = document.getElementById('req-notes').value.trim();
+            const creator = currentUserAccount?.display_name || 'Techniker';
+
+            const rows = selectedRequestParts.map(item => {
+                const c = getCatalogPart(item.partId);
+                return {
+                    part_id: c.id,
+                    flipper_id: finalPinId,
+                    report_id: selectedDefectId || null,
+                    part_name: c.partName,
+                    quantity: item.quantity,
+                    unit_price: c.price,
+                    shop_name: c.shopName || '',
+                    shop_url: c.shopUrl || '',
+                    status: 'benoetigt',
+                    notes: notes,
+                    created_by: creator
+                };
             });
-            if (presetReportId) repSel.value = String(presetReportId);
-        }
 
-        function closeOrderModal() { document.getElementById('order-modal').classList.add('hidden'); editingOrderId = null; }
-
-        async function saveOrderModal() {
-            const partName = document.getElementById('ord-name').value.trim();
-            if (!partName) { showActionToast("Bitte gib die Bezeichnung des Teils ein!", "error"); return; }
-
-            const pinRaw = document.getElementById('ord-pinball').value;
-            const repRaw = document.getElementById('ord-report').value;
-            const qty = Math.max(1, parseInt(document.getElementById('ord-qty').value, 10) || 1);
-            const shopName = document.getElementById('ord-shop-name').value.trim();
-            const shopUrl = document.getElementById('ord-shop-url').value.trim();
-            const notes = document.getElementById('ord-notes').value.trim();
-            const alsoCat = document.getElementById('ord-also-catalog').checked;
-
-            const btn = document.getElementById('ord-save-btn');
+            const btn = document.getElementById('req-submit-btn');
             btn.disabled = true; btn.classList.add('btn-busy');
             try {
-                const payload = {
-                    flipper_id: pinRaw ? Number(pinRaw) : null,
-                    report_id: repRaw ? Number(repRaw) : null,
-                    part_name: partName,
-                    quantity: qty,
-                    shop_name: shopName,
-                    shop_url: shopUrl,
-                    notes: notes
-                };
+                const { error } = await db.from('parts_orders').insert(rows);
+                if (error) throw error;
+                closeRequestModal();
+                showActionToast(`✓ ${rows.length} Teil${rows.length === 1 ? '' : 'e'} auf die Einkaufsliste gesetzt!`, "success");
+                await loadAllDatabaseData();
+                renderSharedHeader();
+                switchPartsTab('einkaufsliste');
+            } catch (err) {
+                showActionToast("Fehler: " + err.message, "error");
+            } finally {
+                btn.disabled = false; btn.classList.remove('btn-busy');
+            }
+        }
 
-                if (editingOrderId === null) {
-                    payload.status = 'benoetigt';
-                    payload.created_by = currentUserAccount?.display_name || 'Techniker';
-                    const { error } = await db.from('parts_orders').insert([payload]);
-                    if (error) throw error;
+        // --- ONLINESHOP-CHECKOUT MODAL ---
 
-                    if (alsoCat) {
-                        await db.from('parts_catalog').insert([{
-                            part_name: partName, category: 'Allgemein',
-                            shop_name: shopName, shop_url: shopUrl, notes: notes
-                        }]);
-                    }
-                } else {
-                    const { error } = await db.from('parts_orders').update(payload).eq('id', editingOrderId);
-                    if (error) throw error;
+        function openShopCheckout(shopName, orderIds) {
+            checkoutShopName = shopName;
+            checkoutOrderIds = orderIds;
+            checkoutCheckedSet = new Set(orderIds);
+            document.getElementById('co-modal-title').innerText = `Bestellung bei: ${shopName}`;
+            renderCheckoutModalItems();
+            document.getElementById('checkout-modal').classList.remove('hidden');
+        }
+
+        function closeCheckoutModal() {
+            document.getElementById('checkout-modal').classList.add('hidden');
+            checkoutOrderIds = [];
+            checkoutCheckedSet.clear();
+        }
+
+        function toggleCheckoutItem(orderId) {
+            if (checkoutCheckedSet.has(orderId)) checkoutCheckedSet.delete(orderId);
+            else checkoutCheckedSet.add(orderId);
+            renderCheckoutModalItems();
+        }
+
+        function renderCheckoutModalItems() {
+            const listEl = document.getElementById('co-items-list');
+            let checkedCount = 0;
+            let totalSum = 0;
+            let hasPrice = false;
+
+            listEl.innerHTML = checkoutOrderIds.map(id => {
+                const o = partsOrdersDB.find(x => x.id === id);
+                if (!o) return '';
+                const isChecked = checkoutCheckedSet.has(id);
+                const pr = getOrderEffectivePrice(o);
+                const url = getOrderEffectiveUrl(o);
+                const cat = o.partId ? getCatalogPart(o.partId) : null;
+
+                if (isChecked) {
+                    checkedCount++;
+                    if (pr !== null) { totalSum += pr * o.quantity; hasPrice = true; }
                 }
 
-                closeOrderModal();
-                showActionToast("✓ Ersatzteil gespeichert!", "success");
+                return `
+                    <div class="checkout-item-row ${isChecked ? '' : 'item-unchecked'}">
+                        <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; flex:1; min-width:220px;">
+                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleCheckoutItem(${o.id})" style="width:20px; height:20px; margin-top:2px; accent-color:var(--status-green); flex-shrink:0;">
+                            <div>
+                                <strong style="font-size:15px; color:var(--text-main);">${o.quantity}× ${escHtml(o.partName)}</strong>
+                                ${cat && cat.partNumber ? `<span style="font-size:12px; color:var(--text-muted);"> (${escHtml(cat.partNumber)})</span>` : ''}
+                                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                                    ${escHtml(getPinNameOrGeneral(o.pinballId))}
+                                    ${pr !== null ? ` • <strong style="color:var(--gold-light);">${formatEuro(pr * o.quantity)}</strong>` : ''}
+                                </div>
+                            </div>
+                        </label>
+                        <div>
+                            ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🔗 Zum Artikel</a>` : '<span style="font-size:12px; color:var(--text-muted);">Kein Link</span>'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('co-summary-count').innerText = `${checkedCount} von ${checkoutOrderIds.length} Positionen ausgewählt`;
+            document.getElementById('co-summary-price').innerText = hasPrice ? `Summe: ca. ${formatEuro(totalSum)}` : '';
+            const btn = document.getElementById('co-confirm-btn');
+            btn.disabled = checkedCount === 0;
+            btn.innerText = `✓ Ausgewählte (${checkedCount}) als bestellt markieren`;
+        }
+
+        async function confirmShopCheckout() {
+            const ids = Array.from(checkoutCheckedSet);
+            if (ids.length === 0) return;
+
+            const btn = document.getElementById('co-confirm-btn');
+            btn.disabled = true; btn.classList.add('btn-busy');
+            try {
+                const { error } = await db.from('parts_orders').update({
+                    status: 'bestellt',
+                    ordered_at: new Date().toISOString()
+                }).in('id', ids);
+                if (error) throw error;
+
+                closeCheckoutModal();
+                showActionToast(`✓ ${ids.length} Position(en) bei ${checkoutShopName} als bestellt markiert!`, "success");
                 await loadAllDatabaseData();
                 renderSharedHeader();
                 renderPartsView();
@@ -459,80 +1168,148 @@
             }
         }
 
+        // --- EINZELNE ORDER-AKTIONEN ---
+
+        async function adjustOrderQty(orderId, delta) {
+            const o = partsOrdersDB.find(x => x.id === orderId);
+            if (!o) return;
+            const next = Math.max(1, o.quantity + delta);
+            const { error } = await db.from('parts_orders').update({ quantity: next }).eq('id', orderId);
+            if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
+            o.quantity = next;
+            saveStateToCache();
+            renderPartsView();
+        }
+
         async function updateOrderStatus(orderId, newStatus) {
             const payload = { status: newStatus };
             if (newStatus === 'bestellt') payload.ordered_at = new Date().toISOString();
             if (newStatus === 'geliefert') payload.delivered_at = new Date().toISOString();
             const { error } = await db.from('parts_orders').update(payload).eq('id', orderId);
             if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
-            showActionToast(`✓ Status auf „${newStatus}“ gesetzt!`, "success");
+            showActionToast(`✓ Status auf „${newStatus}“ geändert!`, "success");
             await loadAllDatabaseData();
             renderSharedHeader();
             renderPartsView();
+        }
+
+        async function markOrderDelivered(orderId, addToStock) {
+            const o = partsOrdersDB.find(x => x.id === orderId);
+            if (!o) return;
+            try {
+                const { error } = await db.from('parts_orders').update({
+                    status: 'geliefert',
+                    delivered_at: new Date().toISOString()
+                }).eq('id', orderId);
+                if (error) throw error;
+
+                if (addToStock && o.partId) {
+                    const cat = getCatalogPart(o.partId);
+                    if (cat) {
+                        const newStock = Number(cat.stockQty || 0) + Number(o.quantity || 1);
+                        await db.from('parts_catalog').update({ stock_qty: newStock }).eq('id', cat.id);
+                    }
+                }
+
+                showActionToast(addToStock ? `✓ Als geliefert markiert & +${o.quantity} ins Lager gebucht!` : "✓ Als geliefert markiert!", "success");
+                await loadAllDatabaseData();
+                renderSharedHeader();
+                renderPartsView();
+            } catch (err) {
+                showActionToast("Fehler: " + err.message, "error");
+            }
         }
 
         async function deleteOrder(orderId) {
-            if (!confirm("Diesen Ersatzteil-Eintrag wirklich löschen?")) return;
+            if (!confirm("Diesen Eintrag wirklich entfernen?")) return;
             const { error } = await db.from('parts_orders').delete().eq('id', orderId);
             if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
-            showActionToast("Eintrag gelöscht.", "info");
+            showActionToast("Eintrag entfernt.", "info");
             await loadAllDatabaseData();
             renderSharedHeader();
             renderPartsView();
         }
 
-        // --- CATALOG MODAL ---
-        function openCatalogModal(catId = null) {
-            editingCatalogId = catId;
-            if (catId === null) {
-                document.getElementById('cat-modal-title').innerText = 'Neues Teil im Shop-Katalog';
-                document.getElementById('cat-name').value = '';
-                document.getElementById('cat-category').value = 'Coilstops & Mechanik';
-                document.getElementById('cat-partno').value = '';
-                document.getElementById('cat-shop-name').value = '';
-                document.getElementById('cat-shop-url').value = '';
-                document.getElementById('cat-notes').value = '';
-            } else {
-                const c = partsCatalogDB.find(x => x.id === catId);
-                if (!c) return;
-                document.getElementById('cat-modal-title').innerText = 'Shop-Katalog bearbeiten';
-                document.getElementById('cat-name').value = c.partName;
-                document.getElementById('cat-category').value = c.category;
-                document.getElementById('cat-partno').value = c.partNumber;
-                document.getElementById('cat-shop-name').value = c.shopName;
-                document.getElementById('cat-shop-url').value = c.shopUrl;
-                document.getElementById('cat-notes').value = c.notes;
+        // --- QR-CODE DIREKTZUGRIFF (?part=ID) ---
+
+        function openQrPartModal(partId) {
+            const p = getCatalogPart(partId);
+            if (!p) {
+                showActionToast(`Teil #${partId} wurde im Inventar nicht gefunden.`, "error");
+                return;
             }
-            document.getElementById('catalog-modal').classList.remove('hidden');
+            qrActivePartId = p.id;
+            document.getElementById('qrp-title').innerText = p.partName;
+
+            const url = normalizeUrl(p.shopUrl);
+            const tagsHtml = (p.tags || []).map(t => `<span class="tag-chip"># ${escHtml(t)}</span>`).join(' ');
+            document.getElementById('qrp-info-box').innerHTML = `
+                ${p.partNumber ? `<strong>Teilnummer:</strong> ${escHtml(p.partNumber)}<br>` : ''}
+                <strong>Shop:</strong> ${escHtml(p.shopName || 'Nicht angegeben')}
+                ${p.price !== null ? ` • <strong>Preis:</strong> ${formatEuro(p.price)}` : ''}<br>
+                ${url ? `<div style="margin-top:6px;"><a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer" class="shop-link-btn">🔗 Im Shop ansehen</a></div>` : ''}
+                ${tagsHtml ? `<div style="margin-top:8px; display:flex; gap:5px; flex-wrap:wrap;">${tagsHtml}</div>` : ''}
+            `;
+
+            renderQrPartStockControl();
+            document.getElementById('qrp-qty').value = '1';
+            document.getElementById('qrp-note').value = '';
+            document.getElementById('qrp-reorder-box').classList.toggle('hidden', !hasPerm('request_parts'));
+            document.getElementById('qr-part-modal').classList.remove('hidden');
         }
-        function closeCatalogModal() { document.getElementById('catalog-modal').classList.add('hidden'); editingCatalogId = null; }
 
-        async function saveCatalogModal() {
-            const partName = document.getElementById('cat-name').value.trim();
-            const shopName = document.getElementById('cat-shop-name').value.trim();
-            const shopUrl = document.getElementById('cat-shop-url').value.trim();
-            if (!partName || !shopUrl) { showActionToast("Bitte Teilename und Shop-URL angeben!", "error"); return; }
+        function renderQrPartStockControl() {
+            const p = getCatalogPart(qrActivePartId);
+            if (!p) return;
+            const qtyClass = p.stockQty <= 0 ? 'stock-zero' : (p.stockQty <= 2 ? 'stock-low' : 'stock-ok');
+            const box = document.getElementById('qrp-stock-control');
+            if (hasPerm('manage_parts')) {
+                box.innerHTML = `
+                    <div class="stock-stepper">
+                        <button onclick="adjustPartStock(${p.id}, -1)">−</button>
+                        <span class="stock-qty-badge ${qtyClass}" style="cursor:pointer;" onclick="promptExactStock(${p.id})">${p.stockQty}</span>
+                        <button onclick="adjustPartStock(${p.id}, 1)">+</button>
+                    </div>
+                `;
+            } else {
+                box.innerHTML = `<strong class="stock-qty-badge ${qtyClass}">${p.stockQty} Stk.</strong>`;
+            }
+        }
 
-            const payload = {
-                part_name: partName,
-                category: document.getElementById('cat-category').value.trim() || 'Allgemein',
-                part_number: document.getElementById('cat-partno').value.trim(),
-                shop_name: shopName,
-                shop_url: shopUrl,
-                notes: document.getElementById('cat-notes').value.trim()
-            };
+        function closeQrPartModal() {
+            document.getElementById('qr-part-modal').classList.add('hidden');
+            qrActivePartId = null;
+            window.history.replaceState({}, '', 'tech-parts');
+        }
 
-            const btn = document.getElementById('cat-save-btn');
+        async function submitQrQuickReorder() {
+            const p = getCatalogPart(qrActivePartId);
+            if (!p) return;
+            const qty = Math.max(1, parseInt(document.getElementById('qrp-qty').value, 10) || 1);
+            const note = document.getElementById('qrp-note').value.trim();
+
+            const btn = document.getElementById('qrp-order-btn');
             btn.disabled = true; btn.classList.add('btn-busy');
             try {
-                const res = editingCatalogId === null
-                    ? await db.from('parts_catalog').insert([payload])
-                    : await db.from('parts_catalog').update(payload).eq('id', editingCatalogId);
-                if (res.error) throw res.error;
-                closeCatalogModal();
-                showActionToast("✓ Im Shop-Katalog gespeichert!", "success");
+                const { error } = await db.from('parts_orders').insert([{
+                    part_id: p.id,
+                    flipper_id: null,
+                    report_id: null,
+                    part_name: p.partName,
+                    quantity: qty,
+                    unit_price: p.price,
+                    shop_name: p.shopName || '',
+                    shop_url: p.shopUrl || '',
+                    status: 'benoetigt',
+                    notes: note || 'Per QR-Code nachbestellt',
+                    created_by: currentUserAccount?.display_name || 'Techniker'
+                }]);
+                if (error) throw error;
+                closeQrPartModal();
+                showActionToast(`✓ ${qty}× ${p.partName} auf die Einkaufsliste gesetzt!`, "success", 4000);
                 await loadAllDatabaseData();
-                renderPartsView();
+                renderSharedHeader();
+                switchPartsTab('einkaufsliste');
             } catch (err) {
                 showActionToast("Fehler: " + err.message, "error");
             } finally {
@@ -540,26 +1317,31 @@
             }
         }
 
-        async function deleteCatalogItem(id) {
-            if (!confirm("Dieses Teil aus dem Shop-Katalog löschen?")) return;
-            const { error } = await db.from('parts_catalog').delete().eq('id', id);
-            if (error) { showActionToast("Fehler: " + error.message, "error"); return; }
-            showActionToast("Aus Katalog entfernt.", "info");
-            await loadAllDatabaseData();
-            renderPartsView();
-        }
+        // Dropdowns schließen, wenn außerhalb geklickt wird
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.searchable-combo')) {
+                document.getElementById('req-defect-dropdown')?.classList.add('hidden');
+                document.getElementById('req-part-dropdown')?.classList.add('hidden');
+            }
+        });
 
         window.addEventListener('DOMContentLoaded', async () => {
             const params = new URLSearchParams(window.location.search);
 
             await initSharedApp(() => {
-                if (!hasPerm('manage_parts') && !hasPerm('view_reports')) { window.location.href = './'; return; }
+                if (!hasPerm('request_parts') && !hasPerm('manage_parts') && !hasPerm('view_reports')) {
+                    window.location.href = './';
+                    return;
+                }
                 renderPartsView();
             });
 
-            if (!isLoggedIn) { window.location.href = './#login'; return; }
-            if (!hasPerm('manage_parts') && !hasPerm('view_reports')) {
-                showActionToast("Keine Berechtigung für Ersatzteile.", "error");
+            if (!isLoggedIn) {
+                redirectToLoginWithReturn();
+                return;
+            }
+            if (!hasPerm('request_parts') && !hasPerm('manage_parts') && !hasPerm('view_reports')) {
+                showActionToast("Keine Berechtigung für Ersatzteile & Inventar.", "error");
                 window.location.href = './';
                 return;
             }
@@ -570,8 +1352,17 @@
             populatePartsPinFilter();
             renderPartsView();
 
-            if (params.get('add') === '1' && hasPerm('manage_parts')) {
-                openOrderModal(null, params.get('pin'), params.get('report'));
+            // Direkter QR-Code-Scan (?part=ID)
+            const qrPartParam = params.get('part') || params.get('qr');
+            if (qrPartParam) {
+                switchPartsTab('inventar');
+                openQrPartModal(Number(qrPartParam));
+                return;
+            }
+
+            // Direkter Absprung aus einer Defektmeldung (?add=1&pin=...&report=...)
+            if (params.get('add') === '1' && hasPerm('request_parts')) {
+                openRequestModal(params.get('report'), null, params.get('pin'));
                 window.history.replaceState({}, '', 'tech-parts');
             }
         });
