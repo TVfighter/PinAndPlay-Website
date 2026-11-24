@@ -1,14 +1,32 @@
+Options -Indexes -MultiViews
 RewriteEngine On
 
-# 1. "index.html" am Ende der Adresse automatisch entfernen
-RewriteCond %{THE_REQUEST} /index\.html[\s?] [NC]
-RewriteRule ^(.*)index\.html$ /$1 [R=301,L]
+# Statische Dateien & Verzeichnisse direkt ausliefern
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-# 2. Falls eine Adresse noch ".html" enthält -> ".html" aus der Adresszeile entfernen
-RewriteCond %{THE_REQUEST} \.html[\s?] [NC]
-RewriteRule ^(.+)\.html$ /$1 [R=301,L]
+# Saubere Routen komplett ohne Fragezeichen
+RewriteRule ^login/?$ index.html [L]
+RewriteRule ^checkin/[^/]+/?$ index.html [L]
+RewriteRule ^feedback/?$ index.html [L]
+RewriteRule ^flipper/[^/]+(/(technik|melden))?/?$ detail.html [L]
+RewriteRule ^highscores(/eintragen(/[^/]+)?)?/?$ highscores.html [L]
+RewriteRule ^tv(/[^/]+)?/?$ tv.html [L]
+RewriteRule ^qr(/kiosk)?/?$ qr.html [L]
+RewriteRule ^konto/?$ konto.html [L]
+RewriteRule ^technik/?$ technik.html [L]
+RewriteRule ^technik/(eingang|defekte|archiv|highscores)/?$ technik-feed.html [L]
+RewriteRule ^technik/feedback/?$ technik-feedback.html [L]
+RewriteRule ^technik/logs/?$ technik-logs.html [L]
+RewriteRule ^ersatzteile(/(einkaufsliste|bestellt|inventar|geliefert|teil/[^/]+|anfordern(/[^/]+(/[^/]+)?)?))?/?$ ersatzteile.html [L]
+RewriteRule ^accounts/?$ accounts.html [L]
 
-# 3. Saubere Adressen ohne ".html" intern mit der passenden .html-Datei verknüpfen
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_FILENAME}\.html -f
-RewriteRule ^([^\.]+)$ $1.html [NC,L]
+# Dauerhafte Umleitung alter URLs auf neue saubere Pfade
+RewriteRule ^techniker(\.html)?/?$ /technik [R=301,L]
+RewriteRule ^tech-feed(\.html)?/?$ /technik/eingang [R=301,L]
+RewriteRule ^tech-parts(\.html)?/?$ /ersatzteile [R=301,L]
+RewriteRule ^tech-accounts(\.html)?/?$ /accounts [R=301,L]
+RewriteRule ^tech-feedback(\.html)?/?$ /technik/feedback [R=301,L]
+RewriteRule ^tech-players(\.html)?/?$ /qr [R=301,L]
+RewriteRule ^tv-highscores(\.html)?/?$ /tv [R=301,L]

@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pin&Play - Highscores</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Pin&amp;Play - Highscores</title>
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <header id="main-header"></header>
 
-    <!-- USER FLOW: Globale Highscore Übersicht & Geräte-Bestenliste -->
+    <!-- ÜBERSICHT & RANGLISTE (/highscores) -->
     <div id="view-highscores" class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="navigateBackTo('./')" title="Zurück zur Übersicht">←</button>
+                <button class="btn-back" onclick="navigateBackTo('/')" title="Zurück zur Übersicht">←</button>
                 <h2 style="margin: 0;">Pin&amp;Play Highscores</h2>
             </div>
             <div class="detail-header-actions">
-                <button id="hs-overview-add-btn" class="btn-green" onclick="openHighscoreSubmitFromLeaderboardHeader()">+ Highscore eintragen</button>
+                <button class="btn-green" onclick="openSubmitFromHeader()">+ Highscore eintragen</button>
             </div>
         </div>
 
-        <h3 style="margin-top: 0; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">Top Scores aller Flipper (Grand Champions)</h3>
+        <h3 style="margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Grand Champions aller Flipper</h3>
         <table class="hs-champions-table">
             <thead>
                 <tr>
@@ -31,107 +31,221 @@
                     <th>Aktion</th>
                 </tr>
             </thead>
-            <tbody id="hs-all-machines-tbody"></tbody>
+            <tbody id="hs-all-tbody"></tbody>
         </table>
 
-        <h3 style="margin-top: 35px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">Alle verifizierten Scores an einem Gerät</h3>
-        <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-            <label for="leaderboard-pinball-select"><strong>Flipper wählen:</strong></label>
-            <select id="leaderboard-pinball-select" onchange="renderMachineLeaderboard()" style="padding: 9px 12px; border-radius: 5px; border: 1px solid var(--border-light); background: var(--surface-input); color: var(--text-main); font-size: 15px; min-width: 220px; flex: 1; max-width: 340px;"></select>
-            <span id="hs-single-inactive-badge" class="badge-inactive-warn hidden">Hinweis: Dieser Flipper ist derzeit außer Betrieb</span>
+        <h3 style="margin-top: 32px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Alle verifizierten Scores an einem Gerät</h3>
+        <div style="margin-bottom: 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <label for="lb-select"><strong>Flipper wählen:</strong></label>
+            <select id="lb-select" onchange="renderMachineLeaderboard()" style="padding: 9px 12px; border-radius: 5px; border: 1px solid var(--border-l); background: var(--input); color: var(--text); font-size: 15px; flex: 1; min-width: 220px; max-width: 360px;"></select>
+            <span id="lb-inactive-badge" class="badge-inactive-warn hidden">Derzeit außer Betrieb</span>
         </div>
         <table class="hs-single-table">
             <thead>
                 <tr>
-                    <th style="width: 80px;">Platz</th>
+                    <th style="width: 75px;">Platz</th>
                     <th>Initialen / Spieler</th>
                     <th>Punktzahl</th>
                     <th>Datum</th>
                 </tr>
             </thead>
-            <tbody id="hs-single-machine-tbody"></tbody>
+            <tbody id="hs-single-tbody"></tbody>
         </table>
     </div>
 
-    <!-- USER FLOW: Highscore Eintragen Seite -->
-    <div id="view-highscore-submit" class="container hidden">
+    <!-- HIGHSCORE EINTRAGEN (/highscores/eintragen oder /highscores/eintragen/<ID>) -->
+    <div id="view-submit" class="container hidden" style="max-width: 720px;">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="goBackFromHighscoreSubmit()" title="Zurück">←</button>
+                <button class="btn-back" onclick="closeSubmitView()" title="Zurück">←</button>
                 <h2 style="margin: 0;">Highscore eintragen</h2>
             </div>
         </div>
         <div class="report-form">
             <label><strong>Flipper auswählen</strong></label>
-            <select id="hs-pinball-select" onchange="onHighscorePinballChange()"></select>
+            <select id="hs-pin-select" onchange="onPinChange()"></select>
 
-            <label><strong>Deine Initialen / Kürzel</strong></label>
-            <input type="text" id="hs-initials" maxlength="3" placeholder="ABC" oninput="handleInitialsInput()">
-            <div id="hs-initials-rules-hint" class="hs-rules-hint"></div>
+            <label><strong>Deine Initialen / Kürzel *</strong></label>
+            <input type="text" id="hs-initials" maxlength="3" placeholder="ABC" oninput="onInitialsInput()" autocomplete="off">
+            <div id="hs-rules-hint" class="hs-rules-hint"></div>
+            <div id="hs-prev-info" class="prev-score-banner">Gib oben dein Kürzel ein, um deinen bisherigen Rekord zu sehen.</div>
 
-            <div id="hs-prev-score-info" class="prev-score-banner">
-                Gib oben dein Kürzel ein, um deinen bisherigen Highscore an diesem Flipper zu sehen.
-            </div>
+            <label><strong>Neuer Highscore (Punktzahl mit Tausenderpunkten) *</strong></label>
+            <input type="text" id="hs-score" inputmode="numeric" autocomplete="off" placeholder="z. B. 125.000.000" oninput="onScoreInput(this)">
+            <div id="hs-rank-preview" class="rank-preview-banner hidden"></div>
 
-            <!-- Erscheint NUR, wenn für dieses Kürzel tatsächlich eine PIN gespeichert wurde -->
-            <div id="hs-pin-protect-box" class="hidden">
-                <label><strong>Spieler-PIN für dieses Kürzel</strong></label>
-                <input type="password" id="hs-player-pin" maxlength="8" placeholder="Deine hinterlegte PIN">
-            </div>
-
-            <label><strong>Neuer Highscore (Punktzahl)</strong></label>
-            <input type="number" id="hs-score" placeholder="z.B. 125000000" min="1">
-
-            <!-- Deutlich hervorgehobene Pflichtfeld-Box für das Beweisfoto -->
-            <div id="hs-photo-upload-box" class="photo-upload-box">
+            <!-- Verschwindet komplett bei Accounts mit auto_verify_highscores -->
+            <div id="hs-photo-box" class="photo-upload-box">
                 <label for="hs-file" style="display: block; margin-bottom: 6px; cursor: pointer;">
-                    <strong id="hs-file-label" style="font-size: 15px; color: var(--gold-light);">📸 Beweisfoto vom Flipper-Display hochladen</strong>
+                    <strong style="font-size: 15px; color: var(--gold-l);">📸 Beweisfoto vom Flipper-Display hochladen</strong>
                     <span class="badge-required">Pflichtfeld</span>
                 </label>
-                <p style="font-size: 13px; color: var(--text-main); margin: 0 0 10px 0; line-height: 1.45;">
-                    Für <strong>jeden Highscore</strong> muss ein Foto vom Display mit deinem sichtbaren Punktestand hochgeladen werden. Ohne Beweisfoto kann der Score nicht abgesendet werden!
+                <p style="font-size: 13px; color: var(--text); margin: 0 0 10px 0; line-height: 1.45;">
+                    Bitte lade ein Foto vom Display mit deinem Punktestand hoch. Das Foto wird direkt nach der Verifizierung wieder gelöscht.
                 </p>
-                <input type="file" id="hs-file" accept="image/*" onchange="onHighscorePhotoSelected()" style="margin-bottom: 6px; border: 1px solid var(--border-light); padding: 8px; background: var(--surface-input);">
-                <div id="hs-photo-selected-hint" style="font-size: 13px; font-weight: bold; color: #ff7b72;">
+                <input type="file" id="hs-file" accept="image/*" onchange="onPhotoSelected()" style="margin-bottom: 6px; border: 1px solid var(--border-l); padding: 8px; background: var(--input);">
+                <div id="hs-photo-hint" style="font-size: 13px; font-weight: bold; color: #ff7b72;">
                     ⚠️ Noch kein Beweisfoto ausgewählt (Pflicht zum Absenden)
                 </div>
             </div>
 
-            <p style="font-size: 13px; color: var(--text-muted); margin-top: 0; margin-bottom: 15px;">
-                Hinweis: Dein Score wird nach dem Absenden anhand des Beweisfotos von einem Techniker überprüft (das Foto wird direkt bei der Verifizierung wieder gelöscht). Ist dein Score höher als dein bisheriger Rekord an diesem Gerät, wird dein alter Rekord automatisch aktualisiert.
-            </p>
+            <p id="hs-submit-note" style="font-size: 13px; color: var(--muted); margin: 0 0 14px 0;"></p>
 
-            <button id="submit-hs-btn" class="btn-green" style="width: 100%; padding: 15px;" onclick="submitHighscore()">Highscore mit Beweisfoto absenden</button>
-            <p id="hs-submit-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
+            <button id="submit-hs-btn" class="btn-green" style="width: 100%; padding: 14px;" onclick="submitHighscore()">Highscore mit Beweisfoto absenden</button>
+            <p id="hs-status" style="display: none; margin-top: 10px; font-weight: bold; text-align: center;"></p>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js"></script>
+    <script src="/app.js"></script>
     <script>
-        let originSource = 'highscores';
-        let originPinballId = null;
-        let isSubmittingHighscore = false;
+        let isSubmitting = false;
 
-        function openDetailFromHighscores(targetUrl) {
+        function openFlipper(id, openTechHs = false) {
             saveCurrentScrollPos();
-            window.location.href = targetUrl;
+            setNavOrigin('/highscores');
+            if (openTechHs) {
+                sessionStorage.setItem('pinplay_detail_tab', 'highscore');
+                window.location.href = `/flipper/${id}/technik`;
+            } else {
+                window.location.href = `/flipper/${id}`;
+            }
         }
 
-        function onHighscorePhotoSelected() {
-            const fileInput = document.getElementById('hs-file');
-            const box = document.getElementById('hs-photo-upload-box');
-            const hint = document.getElementById('hs-photo-selected-hint');
-            const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+        function renderOverview(keepPinId = null) {
+            const tbody = document.getElementById('hs-all-tbody');
+            const sel = document.getElementById('lb-select');
+            const prev = keepPinId || Number(sel.value) || null;
+            const canVerify = hasPerm('verify_highscores');
 
-            if (hasPerm('auto_verify_highscores') && !file) {
-                box.classList.remove('photo-missing-error');
-                box.classList.add('photo-selected-ok');
-                hint.style.color = '#7ee787';
-                hint.innerText = '✓ Dein Account verifiziert Highscores automatisch — Beweisfoto ist nicht erforderlich.';
+            const ordered = [...pinballs].sort((a, b) => (a.isAktiv !== b.isAktiv ? (a.isAktiv ? -1 : 1) : a.name.localeCompare(b.name, 'de')));
+            sel.innerHTML = '';
+
+            tbody.innerHTML = ordered.map((p) => {
+                const unvCount = highscoresDB.filter((h) => h.pinballId === p.id && !h.verifiziert).length;
+                const showUnv = canVerify && unvCount > 0;
+
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name + (p.isAktiv ? '' : ' (Außer Betrieb)') + (showUnv ? ` — ${unvCount} unverifiziert` : '');
+                sel.appendChild(opt);
+
+                const top = highscoresDB.filter((h) => h.pinballId === p.id && h.verifiziert).sort((a, b) => b.score - a.score)[0];
+                const holder = top ? `<strong style="color:var(--gold-l);">${escHtml(getFormattedPlayerDisplay(top.initials, p.id))}</strong>` : '<span style="color:var(--muted);">-</span>';
+                const score = top ? `<strong>${formatScore(top.score)}</strong>` : '<span style="color:var(--muted);">Noch kein Rekord</span>';
+                const addBtn = (canVerify || p.isAktiv)
+                    ? `<button class="btn-add-score" onclick="openSubmitView(${p.id})" title="Highscore eintragen">+</button>`
+                    : `<span class="badge-inactive-icon" title="Derzeit außer Betrieb">!</span>`;
+                const unvBadge = showUnv
+                    ? `<span class="badge-unverified-hs" onclick="openFlipper(${p.id}, true)">${unvCount} unverifiziert</span>` : '';
+
+                return `
+                    <tr class="${showUnv ? 'unverified-hs-row' : ''}">
+                        <td><span class="clickable-name" onclick="openFlipper(${p.id}, false)">${escHtml(p.name)}</span>${unvBadge}</td>
+                        <td>${holder}</td>
+                        <td>${score}</td>
+                        <td><button class="btn-yellow" onclick="selectMachine(${p.id})">Alle Scores</button>${addBtn}</td>
+                    </tr>`;
+            }).join('');
+
+            if (prev && ordered.some((p) => p.id === prev)) sel.value = prev;
+            else if (ordered[0]) sel.value = ordered[0].id;
+            renderMachineLeaderboard();
+        }
+
+        function selectMachine(id) {
+            const sel = document.getElementById('lb-select');
+            sel.value = id;
+            renderMachineLeaderboard();
+            sel.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function renderMachineLeaderboard() {
+            const pinId = Number(document.getElementById('lb-select').value);
+            const pin = pinballs.find((p) => p.id === pinId);
+            document.getElementById('lb-inactive-badge').classList.toggle('hidden', !pin || pin.isAktiv || hasPerm('verify_highscores'));
+
+            const scores = highscoresDB.filter((h) => h.pinballId === pinId && h.verifiziert).sort((a, b) => b.score - a.score);
+            const tbody = document.getElementById('hs-single-tbody');
+            if (scores.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted);"><i>Noch keine verifizierten Highscores an diesem Flipper.</i></td></tr>';
                 return;
             }
 
+            tbody.innerHTML = scores.map((s, i) => {
+                const rank = i < 3 ? `<span class="rank-badge rank-${i + 1}">${i + 1}.</span>` : `<strong>${i + 1}.</strong>`;
+                return `
+                    <tr>
+                        <td>${rank}</td>
+                        <td><strong style="${i === 0 ? 'color:var(--gold-l);' : ''}">${escHtml(getFormattedPlayerDisplay(s.initials, pinId))}</strong></td>
+                        <td>${formatScore(s.score)}</td>
+                        <td>${new Date(s.date).toLocaleDateString('de-DE')}</td>
+                    </tr>`;
+            }).join('');
+        }
+
+        // --- SUBMIT-ANSICHT ---
+
+        function openSubmitFromHeader() {
+            const id = Number(document.getElementById('lb-select').value);
+            const pin = pinballs.find((p) => p.id === id);
+            openSubmitView((!hasPerm('verify_highscores') && pin && !pin.isAktiv) ? null : id);
+        }
+
+        function openSubmitView(presetPinId = null, updateHistory = true) {
+            if (!ensureWritePermission()) return;
+
+            const canInactive = hasPerm('verify_highscores');
+            const list = canInactive ? pinballs : pinballs.filter((p) => p.isAktiv);
+            if (list.length === 0) { showActionToast('Keine aktiven Flipper verfügbar.', 'error'); return; }
+
+            const sel = document.getElementById('hs-pin-select');
+            sel.innerHTML = list.map((p) => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+            const targetId = (presetPinId && list.some((p) => p.id === Number(presetPinId))) ? Number(presetPinId) : list[0].id;
+            sel.value = targetId;
+
+            if (updateHistory) {
+                saveCurrentScrollPos();
+                setNavOrigin('/highscores');
+                window.history.replaceState({}, '', `/highscores/eintragen/${targetId}`);
+            }
+
+            document.getElementById('hs-score').value = '';
+            document.getElementById('hs-file').value = '';
+            configureAutoVerifyUI();
+            onPinChange();
+
+            document.getElementById('view-highscores').classList.add('hidden');
+            document.getElementById('view-submit').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        }
+
+        function closeSubmitView() {
+            const origin = getNavOrigin('/highscores');
+            if (origin && origin !== '/highscores') {
+                navigateBackTo(origin);
+                return;
+            }
+            document.getElementById('view-submit').classList.add('hidden');
+            document.getElementById('view-highscores').classList.remove('hidden');
+            window.history.replaceState({}, '', '/highscores');
+            renderOverview(Number(document.getElementById('hs-pin-select').value));
+        }
+
+        function configureAutoVerifyUI() {
+            const auto = hasPerm('auto_verify_highscores');
+            document.getElementById('hs-photo-box').classList.toggle('hidden', auto);
+            document.getElementById('submit-hs-btn').innerText = auto ? 'Highscore direkt eintragen' : 'Highscore mit Beweisfoto absenden';
+            document.getElementById('hs-submit-note').innerText = auto
+                ? 'Dein Account verifiziert Highscores automatisch — dein Score erscheint ohne Foto sofort in der Rangliste.'
+                : 'Hinweis: Dein Score wird anhand des Beweisfotos geprüft und danach freigeschaltet. Ein niedrigerer alter Rekord von dir wird automatisch ersetzt.';
+            if (!auto) onPhotoSelected();
+        }
+
+        function onPhotoSelected() {
+            const file = document.getElementById('hs-file').files[0];
+            const box = document.getElementById('hs-photo-box');
+            const hint = document.getElementById('hs-photo-hint');
             box.classList.remove('photo-missing-error');
             if (file) {
                 box.classList.add('photo-selected-ok');
@@ -144,517 +258,273 @@
             }
         }
 
-        function renderHighscoreOverview(selectedPinId = null) {
-            const allTbody = document.getElementById('hs-all-machines-tbody');
-            const selectEl = document.getElementById('leaderboard-pinball-select');
-            const currentSelected = selectedPinId || Number(selectEl.value) || null;
-            const canVerifyHs = hasPerm('verify_highscores');
-
-            allTbody.innerHTML = '';
-            selectEl.innerHTML = '';
-
-            const orderedPins = [...pinballs].sort((a, b) => {
-                if (a.isAktiv !== b.isAktiv) return a.isAktiv ? -1 : 1;
-                return a.name.localeCompare(b.name, 'de');
-            });
-
-            orderedPins.forEach(p => {
-                const unverifiedHsCount = highscoresDB.filter(h => h.pinballId === p.id && !h.verifiziert).length;
-                const hasUnverifiedForStaff = canVerifyHs && unverifiedHsCount > 0;
-
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                let optLabel = p.isAktiv ? p.name : `${p.name} (Außer Betrieb)`;
-                if (hasUnverifiedForStaff) {
-                    optLabel += ` — ${unverifiedHsCount} unverifiziert`;
-                }
-                opt.textContent = optLabel;
-                selectEl.appendChild(opt);
-
-                const machineScores = highscoresDB
-                    .filter(h => h.pinballId === p.id && h.verifiziert)
-                    .sort((a, b) => b.score - a.score);
-
-                const topEntry = machineScores[0];
-                const holderDisplay = topEntry ? getFormattedPlayerDisplay(topEntry.initials).replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
-                const holderText = topEntry ? `<strong style="color:var(--gold-light);">${holderDisplay}</strong>` : '<span style="color:var(--text-muted);">-</span>';
-                const scoreText = topEntry ? `<strong>${formatScore(topEntry.score)}</strong>` : '<span style="color:var(--text-muted);">Noch kein Rekord</span>';
-
-                const actionAddHtml = (canVerifyHs || p.isAktiv)
-                    ? `<button class="btn-add-score" onclick="openHighscoreSubmit(${p.id}, 'highscores')" title="Highscore für ${p.name} eintragen">+</button>`
-                    : `<span class="badge-inactive-icon" title="${p.name} ist derzeit außer Betrieb (Keine Highscore-Eintragung möglich)">!</span>`;
-
-                const techUnverifBadgeHtml = hasUnverifiedForStaff
-                    ? `<span class="badge-unverified-hs" onclick="openDetailFromHighscores('tech-detail?id=${p.id}&tab=highscore&from=highscores')" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} zu prüfen">${unverifiedHsCount} unverifiziert</span>`
-                    : '';
-
-                const detailTargetUrl = `detail?id=${p.id}&from=highscores`;
-                const rowClass = hasUnverifiedForStaff ? 'unverified-hs-row' : '';
-
-                allTbody.innerHTML += `
-                    <tr class="${rowClass}">
-                        <td><span class="clickable-name" onclick="openDetailFromHighscores('${detailTargetUrl}')">${p.name}</span>${techUnverifBadgeHtml}</td>
-                        <td>${holderText}</td>
-                        <td>${scoreText}</td>
-                        <td>
-                            <button class="btn-yellow" onclick="selectMachineInLeaderboard(${p.id})">Alle Scores ansehen</button>
-                            ${actionAddHtml}
-                        </td>
-                    </tr>
-                `;
-            });
-
-            const targetId = currentSelected || (orderedPins[0]?.id || null);
-            if (targetId) {
-                selectEl.value = targetId;
+        function sanitizeInitials(raw, pin) {
+            if (!pin) return String(raw || '').toUpperCase();
+            const maxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
+            let out = '';
+            for (const ch of String(raw || '').toUpperCase()) {
+                if (/^[A-ZÄÖÜ]$/.test(ch)) out += ch;
+                else if (/^[0-9]$/.test(ch) && pin.hsAllowNumbers) out += ch;
+                else if (/^[^A-Za-zÄÖÜäöüß0-9]$/.test(ch) && pin.hsAllowSpecial) out += ch;
             }
-
-            renderMachineLeaderboard();
+            return out.substring(0, maxLen);
         }
 
-        function selectMachineInLeaderboard(pinballId) {
-            const selectEl = document.getElementById('leaderboard-pinball-select');
-            selectEl.value = pinballId;
-            renderMachineLeaderboard();
-            selectEl.scrollIntoView({ behavior: 'smooth' });
-        }
-
-        function renderMachineLeaderboard() {
-            const pinId = Number(document.getElementById('leaderboard-pinball-select').value);
-            const selectedPin = pinballs.find(p => p.id === pinId);
-            const singleTbody = document.getElementById('hs-single-machine-tbody');
-            singleTbody.innerHTML = '';
-
-            const singleWarnBadge = document.getElementById('hs-single-inactive-badge');
-            if (selectedPin && !selectedPin.isAktiv && !hasPerm('verify_highscores')) {
-                singleWarnBadge.classList.remove('hidden');
-            } else {
-                singleWarnBadge.classList.add('hidden');
-            }
-
-            const verifiedScores = highscoresDB
-                .filter(h => h.pinballId === pinId && h.verifiziert)
-                .sort((a, b) => b.score - a.score);
-
-            if (verifiedScores.length === 0) {
-                singleTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);"><i>Für diesen Flipper gibt es noch keine verifizierten Highscores.</i></td></tr>';
-                return;
-            }
-
-            verifiedScores.forEach((entry, idx) => {
-                const dateObj = new Date(entry.date);
-                const dateStr = dateObj.toLocaleDateString('de-DE');
-                let rankHtml = `<strong>${idx + 1}.</strong>`;
-                if (idx === 0) rankHtml = `<span class="rank-badge rank-1">1.</span>`;
-                else if (idx === 1) rankHtml = `<span class="rank-badge rank-2">2.</span>`;
-                else if (idx === 2) rankHtml = `<span class="rank-badge rank-3">3.</span>`;
-
-                const displayPlayer = getFormattedPlayerDisplay(entry.initials);
-                const safeInit = displayPlayer.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-                singleTbody.innerHTML += `
-                    <tr>
-                        <td>${rankHtml}</td>
-                        <td><strong style="${idx === 0 ? 'color:var(--gold-light);' : ''}">${safeInit}</strong></td>
-                        <td>${formatScore(entry.score)}</td>
-                        <td>${dateStr}</td>
-                    </tr>
-                `;
-            });
-        }
-
-        function openHighscoreSubmitFromLeaderboardHeader() {
-            const selectedId = Number(document.getElementById('leaderboard-pinball-select').value);
-            const selectedPin = pinballs.find(p => p.id === selectedId);
-            if (!hasPerm('verify_highscores') && selectedPin && !selectedPin.isAktiv) {
-                openHighscoreSubmit(null, 'highscores');
-            } else {
-                openHighscoreSubmit(selectedId, 'highscores');
-            }
-        }
-
-        function openHighscoreSubmit(preselectedPinballId = null, forcedOrigin = null) {
-            if (!ensureWritePermission()) {
-                if (originSource === 'detail' && originPinballId) {
-                    navigateBackTo(`detail?id=${originPinballId}`);
-                } else if (originSource === 'tech-detail' && originPinballId) {
-                    navigateBackTo(`tech-detail?id=${originPinballId}&tab=highscore`);
-                }
-                return;
-            }
-
-            if (forcedOrigin) {
-                originSource = forcedOrigin;
-                sessionStorage.setItem(NAV_HS_SUBMIT_ORIGIN_KEY, forcedOrigin);
-                saveCurrentScrollPos();
-            }
-
-            const canSubmitInactive = hasPerm('verify_highscores');
-            const requestedPin = preselectedPinballId ? pinballs.find(p => p.id === Number(preselectedPinballId)) : null;
-
-            if (!canSubmitInactive && preselectedPinballId && requestedPin && !requestedPin.isAktiv) {
-                showActionToast("Dieser Flipper ist derzeit außer Betrieb (Wartung). Highscores können aktuell nicht eingetragen werden.", "error");
-                return;
-            }
-
-            const selectablePins = canSubmitInactive ? pinballs : pinballs.filter(p => p.isAktiv);
-            if (selectablePins.length === 0) {
-                showActionToast("Derzeit sind keine aktiven Flipper für Highscore-Eintragungen verfügbar.", "error");
-                return;
-            }
-
-            const selectEl = document.getElementById('hs-pinball-select');
-            selectEl.innerHTML = '';
-            selectablePins.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.name;
-                selectEl.appendChild(opt);
-            });
-
-            const targetId = requestedPin && selectablePins.some(p => p.id === requestedPin.id)
-                ? requestedPin.id
-                : selectablePins[0].id;
-            selectEl.value = targetId;
-
-            onHighscorePinballChange();
-            onHighscorePhotoSelected();
-            document.getElementById('view-highscores').classList.add('hidden');
-            document.getElementById('view-highscore-submit').classList.remove('hidden');
-            window.scrollTo({ top: 0, behavior: 'instant' });
-        }
-
-        function goBackFromHighscoreSubmit() {
-            const targetPinId = originPinballId || Number(document.getElementById('hs-pinball-select').value);
-            if (originSource === 'detail' && targetPinId) {
-                navigateBackTo(`detail?id=${targetPinId}`);
-            } else if (originSource === 'tech-detail' && targetPinId) {
-                navigateBackTo(`tech-detail?id=${targetPinId}&tab=highscore`);
-            } else {
-                document.getElementById('view-highscore-submit').classList.add('hidden');
-                document.getElementById('view-highscores').classList.remove('hidden');
-                window.history.replaceState({}, '', 'highscores');
-                renderHighscoreOverview(targetPinId);
-                const savedY = parseInt(sessionStorage.getItem(getNormalizedPageKey()) || '0', 10);
-                window.scrollTo({ top: savedY, behavior: 'instant' });
-            }
-        }
-
-        function getTargetNameForPinball(rawTyped, pin) {
-            const prof = resolvePlayerProfile(rawTyped);
-            if (!prof || !pin) return sanitizeInitialsForPinball(rawTyped, pin);
-            return getProfileNameForPinball(prof, pin);
-        }
-
-        function onHighscorePinballChange() {
-            const pinId = Number(document.getElementById('hs-pinball-select').value);
-            const pin = pinballs.find(p => p.id === pinId);
-            const initialsInput = document.getElementById('hs-initials');
-            const hintBox = document.getElementById('hs-initials-rules-hint');
+        function onPinChange() {
+            const pinId = Number(document.getElementById('hs-pin-select').value);
+            const pin = pinballs.find((p) => p.id === pinId);
+            const inp = document.getElementById('hs-initials');
+            const hint = document.getElementById('hs-rules-hint');
 
             if (pin) {
-                const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
-                initialsInput.maxLength = effectiveMaxLen;
+                const maxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
+                inp.maxLength = maxLen;
+                inp.placeholder = maxLen <= 3 ? 'ABC' : `Max. ${maxLen} Zeichen`;
 
-                if (pin.hsMaxLength === 0) {
-                    initialsInput.placeholder = 'ABC';
-                    hintBox.innerHTML = `<strong>Historisches Gerät („${pin.name}“):</strong> Am Flipper selbst können keine Initialen eingegeben werden. Gib hier dein <strong>3-Zeichen-Kürzel</strong> (A–Z) ein und lade unten dein <strong>Beweisfoto vom Punktestand</strong> hoch.`;
-                } else {
-                    initialsInput.placeholder = effectiveMaxLen <= 3 ? 'ABC' : `Max. ${effectiveMaxLen} Zeichen (oder 3er-Kürzel)`;
-                    let allowedParts = ['Großbuchstaben (A–Z)'];
-                    if (pin.hsAllowNumbers) allowedParts.push('Zahlen (0–9)');
-                    if (pin.hsAllowSpecial) allowedParts.push('Leer-/Sonderzeichen');
-
-                    hintBox.innerHTML = `<strong>Eingaberegeln an „${pin.name}“:</strong> Max. <strong>${effectiveMaxLen} Zeichen</strong> — ${allowedParts.join(', ')} — <strong>Beweisfoto vom Display ist Pflicht!</strong>`;
+                // Automatisch gespeicherte Account-Initialen eintragen
+                if (isLoggedIn && currentUserAccount) {
+                    const myTag = getAccountInitialsForPinball(currentUserAccount, pin);
+                    if (myTag) inp.value = sanitizeInitials(myTag, pin);
                 }
-            }
 
-            handleInitialsInput();
+                const parts = ['Großbuchstaben (A–Z)'];
+                if (pin.hsAllowNumbers) parts.push('Zahlen (0–9)');
+                if (pin.hsAllowSpecial) parts.push('Sonderzeichen');
+                hint.innerHTML = pin.hsMaxLength === 0
+                    ? `<strong>Historisches Gerät („${escHtml(pin.name)}“):</strong> Gib dein <strong>3-Zeichen-Kürzel</strong> (A–Z) ein.`
+                    : `<strong>Eingaberegeln („${escHtml(pin.name)}“):</strong> Max. <strong>${maxLen} Zeichen</strong> — ${parts.join(', ')}.`;
+            }
+            onInitialsInput();
         }
 
-        function sanitizeInitialsForPinball(rawVal, pin) {
-            if (!pin) return String(rawVal || '').toUpperCase();
-            const val = String(rawVal || '').toUpperCase();
-            const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
-
-            let sanitized = '';
-            for (const ch of val) {
-                const isUpper = /^[A-ZÄÖÜ]$/.test(ch);
-                const isDigit = /^[0-9]$/.test(ch);
-                const isSpecial = /^[^A-Za-zÄÖÜäöüß0-9]$/.test(ch);
-
-                if (isUpper) sanitized += ch;
-                else if (isDigit && pin.hsAllowNumbers) sanitized += ch;
-                else if (isSpecial && pin.hsAllowSpecial) sanitized += ch;
-            }
-
-            return sanitized.substring(0, effectiveMaxLen);
-        }
-
-        function handleInitialsInput() {
-            const pinId = Number(document.getElementById('hs-pinball-select').value);
-            const pin = pinballs.find(p => p.id === pinId);
-            const initialsInput = document.getElementById('hs-initials');
-
+        function onInitialsInput() {
+            const pinId = Number(document.getElementById('hs-pin-select').value);
+            const pin = pinballs.find((p) => p.id === pinId);
+            const inp = document.getElementById('hs-initials');
             if (pin) {
-                const cleaned = sanitizeInitialsForPinball(initialsInput.value, pin);
-                if (initialsInput.value !== cleaned) {
-                    initialsInput.value = cleaned;
-                }
+                const cleaned = sanitizeInitials(inp.value, pin);
+                if (inp.value !== cleaned) inp.value = cleaned;
             }
-            updatePreviousHighscoreInfo();
+            updatePreviousInfo();
+            updateRankPreview();
         }
 
-        function updatePreviousHighscoreInfo() {
-            const pinId = Number(document.getElementById('hs-pinball-select').value);
-            const pin = pinballs.find(p => p.id === pinId);
-            const rawTyped = document.getElementById('hs-initials').value.trim();
-            const infoBox = document.getElementById('hs-prev-score-info');
-            const pinBox = document.getElementById('hs-pin-protect-box');
-            const pinInput = document.getElementById('hs-player-pin');
+        function getParsedScoreValue() {
+            const digits = String(document.getElementById('hs-score').value || '').replace(/\D/g, '');
+            if (!digits) return 0;
+            const num = parseInt(digits, 10);
+            return isNaN(num) ? 0 : num;
+        }
 
-            if (!rawTyped) {
-                infoBox.innerHTML = "Gib oben dein Kürzel ein, um deinen bisherigen Highscore an diesem Flipper zu sehen.";
-                if (pinBox) pinBox.classList.add('hidden');
-                if (pinInput) pinInput.value = '';
+        // Live-Tausenderpunkte bei Eingabe (mit sauberer Cursor-Position)
+        function onScoreInput(inputEl) {
+            const raw = inputEl.value;
+            const pos = inputEl.selectionStart || raw.length;
+            const digitsRight = raw.slice(pos).replace(/\D/g, '').length;
+            const cleanDigits = raw.replace(/\D/g, '').replace(/^0+/, '');
+            const formatted = cleanDigits ? cleanDigits.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+            inputEl.value = formatted;
+
+            let newPos = formatted.length;
+            let count = 0;
+            for (let i = formatted.length - 1; i >= 0; i--) {
+                if (/\d/.test(formatted[i])) {
+                    if (count === digitsRight) { newPos = i + 1; break; }
+                    count++;
+                }
+                if (count === digitsRight) { newPos = i; break; }
+            }
+            if (digitsRight === 0) newPos = formatted.length;
+            try { inputEl.setSelectionRange(newPos, newPos); } catch (e) {}
+
+            updateRankPreview();
+        }
+
+        function updatePreviousInfo() {
+            const pinId = Number(document.getElementById('hs-pin-select').value);
+            const initials = document.getElementById('hs-initials').value.trim().toUpperCase();
+            const box = document.getElementById('hs-prev-info');
+
+            if (!initials) {
+                box.innerHTML = 'Gib oben dein Kürzel ein, um deinen bisherigen Rekord zu sehen.';
                 return;
             }
 
-            const matchedProfile = resolvePlayerProfile(rawTyped);
-            const storedPinForProfile = matchedProfile ? localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`) : null;
-            const canBypassPin = hasPerm('verify_highscores');
+            const foreignOwner = isInitialsReservedByOther(initials, pinId);
+            if (foreignOwner) {
+                box.innerHTML = `<span style="color:#ff7b72; font-weight:bold;">🔒 Das Kürzel „${escHtml(initials)}“ ist für den Account „${escHtml(foreignOwner.displayName)}“ reserviert. Nur der Account-Inhaber darf damit eintragen.</span>`;
+                return;
+            }
 
-            if (matchedProfile && matchedProfile.hasPin === true && !canBypassPin) {
-                if (storedPinForProfile) {
-                    pinInput.value = storedPinForProfile;
-                    pinBox.classList.add('hidden');
-                } else {
-                    pinInput.value = '';
-                    pinBox.classList.remove('hidden');
+            const verif = highscoresDB.filter((h) => h.pinballId === pinId && h.verifiziert && isSamePlayerIdentity(h.initials, initials, pinId));
+            const pend = highscoresDB.filter((h) => h.pinballId === pinId && !h.verifiziert && isSamePlayerIdentity(h.initials, initials, pinId));
+            const label = escHtml(getFormattedPlayerDisplay(initials, pinId));
+
+            let html = verif.length > 0
+                ? `Bisheriger Rekord für <strong style="color:var(--gold-l);">${label}</strong>: <strong>${formatScore(Math.max(...verif.map((x) => x.score)))} Punkte</strong>`
+                : `Noch kein verifizierter Rekord für <strong style="color:var(--gold-l);">${label}</strong> an diesem Flipper.`;
+            if (pend.length > 0) {
+                html += `<br><span style="color:var(--gold); font-size:13px;">Aktuell wartet noch ein eingereichter Score (${formatScore(pend[0].score)} Punkte) auf Prüfung.</span>`;
+            }
+            box.innerHTML = html;
+        }
+
+        // Live-Platzierung berechnen & anzeigen
+        function updateRankPreview() {
+            const box = document.getElementById('hs-rank-preview');
+            const scoreVal = getParsedScoreValue();
+            if (!scoreVal || scoreVal <= 0) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            const pinId = Number(document.getElementById('hs-pin-select').value);
+            const initials = document.getElementById('hs-initials').value.trim().toUpperCase();
+
+            const ownVerified = initials
+                ? highscoresDB.filter((h) => h.pinballId === pinId && h.verifiziert && isSamePlayerIdentity(h.initials, initials, pinId))
+                : [];
+            if (ownVerified.length > 0) {
+                const best = Math.max(...ownVerified.map((x) => x.score));
+                if (scoreVal <= best) {
+                    box.classList.remove('hidden');
+                    box.style.background = 'rgba(207, 52, 50, 0.14)';
+                    box.style.borderColor = 'var(--red)';
+                    box.style.color = '#ff7b72';
+                    box.innerHTML = `⚠️ Dein neuer Score (<strong>${formatScore(scoreVal)}</strong>) ist nicht höher als dein bisheriger Rekord (<strong>${formatScore(best)}</strong>).`;
+                    return;
                 }
-            } else {
-                if (pinBox) pinBox.classList.add('hidden');
-                if (pinInput) pinInput.value = '';
             }
 
-            const finalMachineName = matchedProfile
-                ? getTargetNameForPinball(rawTyped, pin)
-                : sanitizeInitialsForPinball(rawTyped, pin);
-
-            const verifiedPlayerScores = highscoresDB.filter(
-                h => h.pinballId === pinId && h.verifiziert && isSamePlayerIdentity(h.initials, rawTyped)
+            // Alle verifizierten Scores anderer Spieler (der eigene niedrigere wird ja ersetzt)
+            const otherScores = highscoresDB.filter(
+                (h) => h.pinballId === pinId && h.verifiziert && !(initials && isSamePlayerIdentity(h.initials, initials, pinId))
             );
-            const pendingPlayerScores = highscoresDB.filter(
-                h => h.pinballId === pinId && !h.verifiziert && isSamePlayerIdentity(h.initials, rawTyped)
-            );
+            const higherCount = otherScores.filter((h) => h.score > scoreVal).length;
+            const rank = higherCount + 1;
+            const total = otherScores.length + 1;
 
-            let html = '';
-            if (matchedProfile) {
-                html += `<div style="margin-bottom: 4px; color: var(--gold-light);">Verknüpftes Spielerprofil: <strong>${matchedProfile.displayName}</strong> — Kürzel für „${pin ? pin.name : 'dieses Gerät'}“: <strong>${finalMachineName}</strong></div>`;
-            }
+            box.classList.remove('hidden');
+            box.style.background = 'rgba(46, 160, 67, 0.12)';
+            box.style.borderColor = 'var(--green)';
+            box.style.color = '#a2f2a9';
 
-            if (verifiedPlayerScores.length > 0) {
-                const best = Math.max(...verifiedPlayerScores.map(s => s.score));
-                html += `Dein bisheriger verifizierter Highscore an diesem Gerät: <strong>${formatScore(best)} Punkte</strong>`;
+            if (rank === 1) {
+                box.innerHTML = `👑 Mit <strong>${formatScore(scoreVal)} Punkten</strong> wärst du auf <strong>Platz 1 von ${total}</strong> — neuer Grand Champion!`;
             } else {
-                html += `Noch kein verifizierter Highscore für <strong style="color:var(--gold-light);">${matchedProfile ? matchedProfile.displayName : finalMachineName}</strong> an diesem Gerät eingetragen.`;
+                box.innerHTML = `🏅 Mit <strong>${formatScore(scoreVal)} Punkten</strong> wärst du auf <strong>Platz ${rank} von ${total}</strong> in der Rangliste.`;
             }
-
-            if (pendingPlayerScores.length > 0) {
-                const latestPending = pendingPlayerScores[0];
-                html += `<br><span style="color: var(--gold-mid); font-size: 13px;">Hinweis: Es wartet aktuell noch ein eingereichter Score (${formatScore(latestPending.score)} Punkte) auf Verifizierung.</span>`;
-            }
-            infoBox.innerHTML = html;
         }
 
         async function submitHighscore() {
-            if (isSubmittingHighscore) return;
-            if (!ensureWritePermission()) return;
+            if (isSubmitting || !ensureWritePermission()) return;
 
-            const pinId = Number(document.getElementById('hs-pinball-select').value);
-            const pin = pinballs.find(p => p.id === pinId);
+            const pinId = Number(document.getElementById('hs-pin-select').value);
+            const pin = pinballs.find((p) => p.id === pinId);
             if (!pin) return;
 
-            const canVerifyHs = hasPerm('verify_highscores');
-            if (!canVerifyHs && !pin.isAktiv) {
-                showActionToast("Sicherheitssperre: Für einen inaktiven Flipper können keine Highscores eingetragen werden!", "error");
+            if (!hasPerm('verify_highscores') && !pin.isAktiv) {
+                showActionToast('Für inaktive Flipper können keine Highscores eingetragen werden.', 'error');
                 return;
             }
 
-            const rawInitials = document.getElementById('hs-initials').value.trim();
-            const matchedProfile = resolvePlayerProfile(rawInitials);
+            const initials = sanitizeInitials(document.getElementById('hs-initials').value, pin).trim();
+            const scoreVal = getParsedScoreValue();
+            const autoVerify = hasPerm('auto_verify_highscores');
+            const file = document.getElementById('hs-file').files[0];
+            const btn = document.getElementById('submit-hs-btn');
+            const st = document.getElementById('hs-status');
 
-            const initials = matchedProfile
-                ? getTargetNameForPinball(rawInitials, pin)
-                : sanitizeInitialsForPinball(rawInitials, pin).trim();
-
-            const scoreVal = parseInt(document.getElementById('hs-score').value, 10);
-            const fileInput = document.getElementById('hs-file');
-            const file = fileInput && fileInput.files ? fileInput.files[0] : null;
-            const photoBox = document.getElementById('hs-photo-upload-box');
-
-            const statusEl = document.getElementById('hs-submit-status');
-            const submitBtn = document.getElementById('submit-hs-btn');
-
-            if (!pinId || !initials || !scoreVal || isNaN(scoreVal) || scoreVal <= 0) {
-                showActionToast("Bitte gib gültige Initialen und eine Punktzahl ein!", "error");
+            if (!initials || !scoreVal || scoreVal <= 0) {
+                showActionToast('Bitte gib gültige Initialen und eine Punktzahl ein!', 'error');
                 return;
             }
 
-            const autoVerifyHs = hasPerm('auto_verify_highscores');
+            const foreignOwner = isInitialsReservedByOther(initials, pinId);
+            if (foreignOwner) {
+                showActionToast(`Die Initialen „${initials}“ gehören zum Account „${foreignOwner.displayName}“!`, 'error', 4500);
+                return;
+            }
 
-            if (!autoVerifyHs && !file) {
+            if (!autoVerify && !file) {
+                const photoBox = document.getElementById('hs-photo-box');
                 photoBox.classList.remove('photo-selected-ok');
                 photoBox.classList.add('photo-missing-error');
                 photoBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                statusEl.style.display = 'block';
-                statusEl.style.color = '#ff7b72';
-                statusEl.innerText = "⚠️ Absenden blockiert: Bitte wähle zuerst ein Beweisfoto vom Flipper-Display aus!";
-                showActionToast("⚠️ Beweisfoto fehlt! Für jeden Highscore ist ein Foto vom Display Pflicht.", "error", 4200);
+                showActionToast('⚠️ Bitte wähle zuerst ein Beweisfoto vom Display aus!', 'error', 4000);
                 return;
             }
 
-            if (pin.hsMaxLength === 0) {
-                const duplicateExactScore = highscoresDB.some(h => h.pinballId === pinId && h.score === scoreVal);
-                if (duplicateExactScore) {
-                    showActionToast(`Exakt dieser Punktestand (${formatScore(scoreVal)}) wurde an „${pin.name}“ bereits eingereicht!`, "error", 4200);
-                    return;
-                }
-            } else {
-                const duplicatePlayerScore = highscoresDB.some(
-                    h => h.pinballId === pinId && isSamePlayerIdentity(h.initials, initials) && h.score === scoreVal
-                );
-                if (duplicatePlayerScore) {
-                    showActionToast("Dieser Punktestand wurde für dein Kürzel bereits eingereicht!", "error");
-                    return;
-                }
+            // Doppel- & Rekord-Prüfung
+            const dup = pin.hsMaxLength === 0
+                ? highscoresDB.some((h) => h.pinballId === pinId && h.score === scoreVal)
+                : highscoresDB.some((h) => h.pinballId === pinId && isSamePlayerIdentity(h.initials, initials, pinId) && h.score === scoreVal);
+            if (dup) { showActionToast('Dieser Punktestand wurde bereits eingereicht!', 'error'); return; }
+
+            const ownVerif = highscoresDB.filter((h) => h.pinballId === pinId && h.verifiziert && isSamePlayerIdentity(h.initials, initials, pinId));
+            if (ownVerif.length > 0 && scoreVal <= Math.max(...ownVerif.map((x) => x.score))) {
+                showActionToast('Dein neuer Score muss höher sein als dein bisheriger Rekord!', 'error');
+                return;
             }
 
-            const verifiedPlayerScores = highscoresDB.filter(
-                h => h.pinballId === pinId && h.verifiziert && isSamePlayerIdentity(h.initials, initials)
-            );
-            if (verifiedPlayerScores.length > 0) {
-                const currentBest = Math.max(...verifiedPlayerScores.map(s => s.score));
-                if (scoreVal <= currentBest) {
-                    showActionToast(`Dein neuer Score (${formatScore(scoreVal)}) muss höher sein als dein bisheriger Rekord (${formatScore(currentBest)})!`, "error", 4500);
-                    return;
-                }
-            }
-
-            isSubmittingHighscore = true;
-            submitBtn.disabled = true;
-            submitBtn.classList.add('btn-busy');
+            isSubmitting = true;
+            btn.disabled = true; btn.classList.add('btn-busy');
+            btn.innerText = autoVerify ? '⏳ Speichere Highscore...' : '⏳ Komprimiere Foto & sende...';
+            st.style.display = 'block'; st.style.color = 'var(--gold-l)';
+            st.innerText = autoVerify ? 'Highscore wird direkt verifiziert gespeichert...' : 'Beweisfoto wird komprimiert und übertragen...';
 
             try {
-                if (matchedProfile && matchedProfile.hasPin === true && !canVerifyHs) {
-                    const savedPin = localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`);
-                    const enteredPin = document.getElementById('hs-player-pin').value.trim();
-                    const activePin = savedPin || enteredPin;
-
-                    if (!activePin) {
-                        document.getElementById('hs-pin-protect-box').classList.remove('hidden');
-                        showActionToast(`Für das Kürzel „${matchedProfile.displayName}“ ist eine PIN hinterlegt. Bitte gib deine PIN ein!`, "info", 4200);
-                        isSubmittingHighscore = false;
-                        submitBtn.disabled = false;
-                        submitBtn.classList.remove('btn-busy');
-                        return;
-                    }
-
-                    const { data: pinValid, error: pinErr } = await db.rpc('verify_player_pin', {
-                        p_player_id: matchedProfile.id,
-                        p_pin: activePin
-                    });
-
-                    if (pinErr || !pinValid) {
-                        localStorage.removeItem(`pinplay_player_pin_${matchedProfile.id}`);
-                        document.getElementById('hs-pin-protect-box').classList.remove('hidden');
-                        document.getElementById('hs-player-pin').value = '';
-                        showActionToast("Falsche Spieler-PIN! Bitte gib die korrekte PIN ein.", "error", 4000);
-                        isSubmittingHighscore = false;
-                        submitBtn.disabled = false;
-                        submitBtn.classList.remove('btn-busy');
-                        return;
-                    }
-
-                    localStorage.setItem(`pinplay_player_pin_${matchedProfile.id}`, activePin);
-                }
-
-                submitBtn.innerText = (!autoVerifyHs && file) ? "⏳ Komprimiere Beweisfoto & sende..." : "⏳ Sende Highscore...";
-                statusEl.style.display = 'block';
-                statusEl.style.color = 'var(--gold-light)';
-                statusEl.innerText = autoVerifyHs ? "Highscore wird direkt verifiziert gespeichert..." : "Beweisfoto wird komprimiert und Highscore übertragen...";
-
-                const uploadedFilePath = autoVerifyHs ? '' : await uploadIncomingPhoto('highscore', file);
-
-                const { data: insertedRows, error } = await db.from('highscore').insert([{
+                const fotoPath = autoVerify ? '' : await uploadIncomingPhoto('highscore', file);
+                const { data: rows, error } = await db.from('highscore').insert([{
                     flipper_id: pinId,
-                    initials: initials,
+                    initials,
                     score: scoreVal,
-                    verifiziert: autoVerifyHs,
-                    beweisfoto: uploadedFilePath
+                    verifiziert: autoVerify,
+                    beweisfoto: fotoPath
                 }]).select();
-
                 if (error) throw error;
 
-                if (autoVerifyHs && insertedRows && insertedRows.length > 0) {
-                    await removeOldLowerPlayerScores(pinId, initials, insertedRows[0].id, scoreVal);
+                if (autoVerify && rows && rows.length > 0) {
+                    await removeOldLowerPlayerScores(pinId, initials, rows[0].id, scoreVal);
                 }
 
-                submitBtn.classList.remove('btn-busy');
-                submitBtn.innerText = autoVerifyHs ? "✓ Highscore direkt verifiziert!" : "✓ Highscore eingereicht!";
-                statusEl.style.color = '#3fb950';
-                statusEl.innerText = autoVerifyHs
-                    ? "✓ Highscore direkt verifiziert in die Rangliste eingetragen!"
-                    : "✓ Highscore mit Beweisfoto eingereicht! Er wird nach Prüfung freigeschaltet.";
-                showActionToast(statusEl.innerText, "success");
-
-                document.getElementById('hs-score').value = '';
-                fileInput.value = '';
-                onHighscorePhotoSelected();
+                btn.classList.remove('btn-busy');
+                btn.innerText = autoVerify ? '✓ Highscore direkt eingetragen!' : '✓ Highscore eingereicht!';
+                st.style.color = '#3fb950';
+                st.innerText = autoVerify ? '✓ Direkt in die Rangliste eingetragen!' : '✓ Mit Beweisfoto eingereicht — wartet auf Prüfung.';
+                showActionToast(st.innerText, 'success');
 
                 await loadAllDatabaseData();
                 setTimeout(() => {
-                    statusEl.style.display = 'none';
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = "Highscore mit Beweisfoto absenden";
-                    isSubmittingHighscore = false;
-                    goBackFromHighscoreSubmit();
-                }, 1300);
+                    st.style.display = 'none';
+                    btn.disabled = false;
+                    isSubmitting = false;
+                    configureAutoVerifyUI();
+                    closeSubmitView();
+                }, 1200);
             } catch (err) {
-                isSubmittingHighscore = false;
-                submitBtn.classList.remove('btn-busy');
-                statusEl.style.color = '#ff7b72';
-                statusEl.innerText = "Fehler beim Senden: " + err.message;
-                showActionToast("Fehler beim Senden: " + err.message, "error");
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Highscore mit Beweisfoto absenden";
+                isSubmitting = false;
+                btn.classList.remove('btn-busy');
+                btn.disabled = false;
+                configureAutoVerifyUI();
+                st.style.color = '#ff7b72';
+                st.innerText = 'Fehler: ' + err.message;
+                showActionToast('Fehler: ' + err.message, 'error', 4500);
             }
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
-            const params = new URLSearchParams(window.location.search);
-            const isSubmitMode = params.get('submit') === '1';
-            originPinballId = params.get('id') ? Number(params.get('id')) : null;
-            originSource = navOriginHsSubmit || 'highscores';
-
-            if (isSubmitMode) {
-                document.getElementById('view-highscores').classList.add('hidden');
-                document.getElementById('view-highscore-submit').classList.remove('hidden');
-            }
+            const segs = getPathSegments(); // ['highscores', 'eintragen', '<id>']
+            const isSubmit = segs[1] === 'eintragen';
+            const presetId = segs[2] ? Number(segs[2]) : null;
 
             await initSharedApp(() => {
-                if (document.getElementById('view-highscore-submit').classList.contains('hidden')) {
-                    renderHighscoreOverview(originPinballId);
-                } else {
-                    updatePreviousHighscoreInfo();
-                }
+                if (document.getElementById('view-submit').classList.contains('hidden')) renderOverview(presetId);
+                else { configureAutoVerifyUI(); updatePreviousInfo(); updateRankPreview(); }
             });
 
-            renderHighscoreOverview(originPinballId);
-
-            if (isSubmitMode) {
-                openHighscoreSubmit(originPinballId);
-            }
+            renderOverview(presetId);
+            if (isSubmit) openSubmitView(presetId, false);
         });
     </script>
 </body>

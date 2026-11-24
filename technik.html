@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&amp;Play - Technik Flipper-Übersicht</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="navigateBackTo('/')" title="Zurück zur Übersicht">←</button>
+                <h2 style="margin: 0;">Technik-Center</h2>
+            </div>
+            <div class="detail-header-actions">
+                <button id="bulk-on-btn" class="btn-green hidden" onclick="setAllPower(true)">Alle Aktiven AN</button>
+                <button id="bulk-off-btn" class="btn-report hidden" onclick="setAllPower(false)">Alle Flipper AUS</button>
+            </div>
+        </div>
+
+        <div id="tech-subnav" class="report-mode-tabs"></div>
+
+        <table class="tech-table">
+            <thead>
+                <tr>
+                    <th class="sortable-th" onclick="sortTable('short')">Kürzel <span id="si-short" class="sort-indicator"></span></th>
+                    <th class="sortable-th" onclick="sortTable('name')">Name des Flippers <span id="si-name" class="sort-indicator"></span></th>
+                    <th class="sortable-th" style="width: 90px; text-align: center;" onclick="sortTable('status')">Status <span id="si-status" class="sort-indicator"></span></th>
+                    <th class="sortable-th" onclick="sortTable('reports')">Offene Meldungen <span id="si-reports" class="sort-indicator"></span></th>
+                    <th class="sortable-th" onclick="sortTable('power')">Power <span id="si-power" class="sort-indicator"></span></th>
+                    <th>Handbuch</th>
+                </tr>
+            </thead>
+            <tbody id="tech-table-body">
+                <tr><td colspan="6" style="text-align:center;">Lade Daten...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/app.js"></script>
+    <script>
+        let sortCol = 'name';
+        let sortAsc = true;
+
+        function openFlipperTech(pinId, tab = 'offen') {
+            saveCurrentScrollPos();
+            setNavOrigin('/technik');
+            sessionStorage.setItem('pinplay_detail_tab', tab);
+            window.location.href = hasPinballTechViewAccess() ? `/flipper/${pinId}/technik` : `/flipper/${pinId}`;
+        }
+
+        function getCountsHtml(pinId) {
+            const open = reportsDB.filter((r) => r.pinballId === pinId && r.status === 'offen');
+            if (open.length === 0) return '<span style="color:var(--muted);">-</span>';
+            const r = open.filter((x) => x.prio === 1).length;
+            const g = open.filter((x) => x.prio === 2).length;
+            const b = open.filter((x) => x.prio === 3).length;
+            const u = open.filter((x) => !x.prio).length;
+            const out = [];
+            if (r) out.push(`<span class="count-r" title="${r}x Prio 1">${r}</span>`);
+            if (g) out.push(`<span class="count-g" title="${g}x Prio 2">${g}</span>`);
+            if (b) out.push(`<span class="count-b" title="${b}x Prio 3">${b}</span>`);
+            if (u) out.push(`<span class="count-u" title="${u}x Unverifiziert">${u}</span>`);
+            return `<div class="meldungen-counts" onclick="openFlipperTech(${pinId}, 'offen')">${out.join('')}</div>`;
+        }
+
+        function getReportWeight(pinId) {
+            const open = reportsDB.filter((r) => r.pinballId === pinId && r.status === 'offen');
+            return open.filter((x) => x.prio === 1).length * 1000
+                + open.filter((x) => x.prio === 2).length * 100
+                + open.filter((x) => x.prio === 3).length * 10
+                + open.filter((x) => !x.prio).length;
+        }
+
+        function sortTable(col) {
+            if (sortCol === col) sortAsc = !sortAsc;
+            else { sortCol = col; sortAsc = true; }
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            renderTechSubnav('tech-subnav', 'dashboard');
+
+            const canPwr = hasPerm('power_off');
+            const canRep = hasPerm('view_reports');
+            document.getElementById('bulk-on-btn').classList.toggle('hidden', !canPwr);
+            document.getElementById('bulk-off-btn').classList.toggle('hidden', !canPwr);
+
+            ['short', 'name', 'status', 'reports', 'power'].forEach((c) => {
+                const el = document.getElementById(`si-${c}`);
+                if (el) el.innerText = sortCol === c ? (sortAsc ? '▲' : '▼') : '';
+            });
+
+            const sorted = [...pinballs].sort((a, b) => {
+                let cmp = 0;
+                if (sortCol === 'short') cmp = a.short.localeCompare(b.short, 'de');
+                else if (sortCol === 'name') cmp = a.name.localeCompare(b.name, 'de');
+                else if (sortCol === 'status') cmp = (a.isAktiv === b.isAktiv) ? 0 : (a.isAktiv ? -1 : 1);
+                else if (sortCol === 'reports') cmp = getReportWeight(b.id) - getReportWeight(a.id);
+                else if (sortCol === 'power') cmp = (a.power === b.power) ? 0 : (a.power === 'ON' ? -1 : 1);
+                return sortAsc ? cmp : -cmp;
+            });
+
+            const defTab = canRep ? 'offen' : 'highscore';
+            document.getElementById('tech-table-body').innerHTML = sorted.map((p) => {
+                const pCol = p.power === 'ON' ? '#3fb950' : '#ff7b72';
+                const pDis = !canPwr && (p.power === 'ON' || !p.isAktiv);
+                const pAttr = pDis
+                    ? `disabled style="opacity:0.5; cursor:not-allowed; color:${pCol};"`
+                    : `style="color:${pCol};"`;
+                return `
+                    <tr>
+                        <td><strong style="color:var(--gold-l);">${escHtml(p.short)}</strong></td>
+                        <td><span class="clickable-name" onclick="openFlipperTech(${p.id}, '${defTab}')">${escHtml(p.name)}</span></td>
+                        <td><span class="status-color-box ${p.isAktiv ? 'status-box-green' : 'status-box-orange'}" title="${p.status}"></span></td>
+                        <td>${canRep ? getCountsHtml(p.id) : '<span style="color:var(--muted);">-</span>'}</td>
+                        <td><button id="pwr-${p.id}" class="btn-switch" onclick="handleRowPower(${p.id})" ${pAttr}>${p.power}</button></td>
+                        <td><button class="btn-yellow" onclick="showActionToast('Handbuch-Link folgt', 'info')">PDF</button></td>
+                    </tr>`;
+            }).join('');
+        }
+
+        async function handleRowPower(id) {
+            await togglePinballPower(id, document.getElementById(`pwr-${id}`), () => renderDashboard());
+        }
+
+        async function setAllPower(turnOn) {
+            if (!hasPerm('power_off')) return;
+            const targets = turnOn ? pinballs.filter((p) => p.isAktiv) : pinballs;
+            const ids = targets.map((p) => p.id);
+            if (!ids.length) return;
+
+            const btnOn = document.getElementById('bulk-on-btn');
+            const btnOff = document.getElementById('bulk-off-btn');
+            const active = turnOn ? btnOn : btnOff;
+            const orig = active.innerText;
+            btnOn.disabled = true; btnOff.disabled = true;
+            active.classList.add('btn-busy');
+            active.innerText = turnOn ? '⏳ Schalte ein...' : '⏳ Schalte aus...';
+
+            const { error } = await db.from('flipper').update({ an: turnOn }).in('id', ids);
+            btnOn.disabled = false; btnOff.disabled = false;
+            active.classList.remove('btn-busy');
+            active.innerText = orig;
+
+            if (error) { showActionToast('Fehler: ' + error.message, 'error'); return; }
+            targets.forEach((p) => { p.power = turnOn ? 'ON' : 'OFF'; });
+            saveStateToCache();
+            renderDashboard();
+            showActionToast(turnOn ? `✓ Alle ${targets.length} aktiven Flipper AN!` : '✓ Alle Flipper AUS!', 'success');
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => {
+                if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+                if (!hasAnyTechCenterAccess()) { window.location.href = '/'; return; }
+                renderDashboard();
+            });
+            if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+            if (!hasPerm('power_off') && !hasPerm('view_reports') && !hasPerm('verify_highscores')) {
+                window.location.href = hasAnyTechCenterAccess() ? getDefaultTechUrl() : '/';
+                return;
+            }
+            renderDashboard();
+        });
+    </script>
+</body>
+</html>

@@ -1,224 +1,80 @@
-// 1. Tages-Token (?token=...) und getrennte Herkunft (?from=...) sofort auslesen und aus der Adresszeile entfernen
 const DAILY_TOKEN_KEY = 'pinplay_daily_token';
-const NAV_DETAIL_ORIGIN_KEY = 'pinplay_origin_detail';
-const NAV_HS_SUBMIT_ORIGIN_KEY = 'pinplay_origin_hs_submit';
 const BACK_NAV_FLAG_KEY = 'pinplay_is_back_nav';
 const POST_LOGIN_REDIRECT_KEY = 'pinplay_post_login_redirect';
+const NAV_ORIGIN_KEY = 'pinplay_nav_origin';
+const CACHE_KEY_STATE = 'pinplay_state_cache_v10';
+const CACHE_TTL_MS = 15 * 1000;
+const LIVE_SYNC_INTERVAL_MS = 15 * 1000;
+const ROOT_ACCOUNT_EMAIL = 'technik@pinandplay.de';
 
-let navOriginDetail = sessionStorage.getItem(NAV_DETAIL_ORIGIN_KEY) || '';
-let navOriginHsSubmit = sessionStorage.getItem(NAV_HS_SUBMIT_ORIGIN_KEY) || '';
-let navOriginFrom = navOriginDetail;
-
-(function cleanUrlParameters() {
+// Check-In-Token sofort aus sauberer URL (/checkin/TOKEN) oder Alt-URL (?token=...) übernehmen
+(function extractDailyToken() {
+    const pathMatch = window.location.pathname.match(/^\/checkin\/([^/]+)\/?$/i);
+    if (pathMatch && pathMatch[1]) {
+        localStorage.setItem(DAILY_TOKEN_KEY, decodeURIComponent(pathMatch[1]).trim().toUpperCase());
+        window.history.replaceState({}, '', '/');
+        return;
+    }
     const params = new URLSearchParams(window.location.search);
-    const path = window.location.pathname;
-    let urlChanged = false;
-
-    const scannedToken = params.get('token');
-    if (scannedToken && scannedToken.trim() !== '') {
-        localStorage.setItem(DAILY_TOKEN_KEY, scannedToken.trim().toUpperCase());
-        params.delete('token');
-        urlChanged = true;
-    }
-
-    const isHighscoresPage = path.endsWith('highscores') || path.endsWith('highscores.html');
-    const isDetailPage = path.endsWith('detail') || path.endsWith('detail.html') || path.endsWith('tech-detail') || path.endsWith('tech-detail.html');
-
-    if (params.has('from')) {
-        const fromVal = params.get('from') || '';
-        if (isHighscoresPage) {
-            navOriginHsSubmit = fromVal;
-            sessionStorage.setItem(NAV_HS_SUBMIT_ORIGIN_KEY, fromVal);
-        } else {
-            navOriginDetail = fromVal;
-            navOriginFrom = fromVal;
-            sessionStorage.setItem(NAV_DETAIL_ORIGIN_KEY, fromVal);
-        }
-        params.delete('from');
-        urlChanged = true;
-    } else if (!isHighscoresPage && !isDetailPage) {
-        navOriginDetail = '';
-        navOriginHsSubmit = '';
-        navOriginFrom = '';
-        sessionStorage.removeItem(NAV_DETAIL_ORIGIN_KEY);
-        sessionStorage.removeItem(NAV_HS_SUBMIT_ORIGIN_KEY);
-    }
-
-    if (urlChanged) {
-        const cleanQuery = params.toString();
-        const cleanUrl = window.location.pathname + (cleanQuery ? `?${cleanQuery}` : '') + window.location.hash;
-        window.history.replaceState({}, '', cleanUrl);
+    const legacyToken = params.get('token');
+    if (legacyToken && legacyToken.trim()) {
+        localStorage.setItem(DAILY_TOKEN_KEY, legacyToken.trim().toUpperCase());
+        window.history.replaceState({}, '', window.location.pathname);
     }
 })();
 
-
-// Supabase initialisieren (inkl. Übergabe des gespeicherten Tages-Tokens im Header)
+// Supabase Client
 const supabaseUrl = 'https://gwvxctkowtiyfrhoozhj.supabase.co';
 const supabaseKey = 'sb_publishable__H6Yjq1-Tift6S7NHxSGcw_ihus2Zbw';
 const currentDailyToken = localStorage.getItem(DAILY_TOKEN_KEY) || '';
 const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
-    global: {
-        headers: {
-            'x-pinplay-token': currentDailyToken
-        }
-    }
+    global: { headers: { 'x-pinplay-token': currentDailyToken } }
 });
-
-const OFFICIAL_HOMEPAGE_URL = './';
-const CACHE_KEY_STATE = 'pinplay_full_data_cache_v9';
-const CACHE_TTL_MS = 15 * 1000;
-const LIVE_SYNC_INTERVAL_MS = 15 * 1000;
 
 // Globale Datenspeicher
 let pinballs = [];
 let reportsDB = [];
 let highscoresDB = [];
 let feedbackDB = [];
-let playersDB = [];
+let playerTagsDB = [];
 let partsOrdersDB = [];
 let partsCatalogDB = [];
 let partsTagsDB = [];
 let accountsDB = [];
 let currentUserAccount = null;
 let isLoggedIn = false;
-let isTechMode = false; // Veraltet, nur noch als stiller Kompatibilitäts-Wert erhalten
 let hasValidDailyToken = false;
 let currentPageUpdateCallback = null;
 let liveSyncTimer = null;
 let isRestoringScroll = true;
 
-// --- GRANULARES BERECHTIGUNGSSYSTEM (OHNE TECHNIKERMODUS) ---
+// --- HILFSFUNKTIONEN FÜR FORMATIERUNG & ROUTING ---
 
-function hasPerm(permKey) {
-    if (!isLoggedIn || !currentUserAccount) return false;
-    if (currentUserAccount.perm_manage_accounts === true) return true;
-
-    switch (permKey) {
-        case 'admin':
-        case 'manage_accounts':
-            return false;
-        case 'no_qr':
-            return currentUserAccount.perm_no_qr === true;
-        case 'power_off':
-            return currentUserAccount.perm_power_off === true;
-        case 'auto_verify_reports':
-            return currentUserAccount.perm_auto_verify_reports === true
-                || currentUserAccount.perm_view_reports === true
-                || currentUserAccount.perm_manage_reports === true;
-        case 'view_reports':
-            return currentUserAccount.perm_view_reports === true
-                || currentUserAccount.perm_manage_reports === true;
-        case 'manage_reports':
-            return currentUserAccount.perm_manage_reports === true;
-        case 'auto_verify_highscores':
-            return currentUserAccount.perm_auto_verify_highscores === true
-                || currentUserAccount.perm_verify_highscores === true;
-        case 'verify_highscores':
-            return currentUserAccount.perm_verify_highscores === true;
-        case 'request_parts':
-            return currentUserAccount.perm_request_parts === true
-                || currentUserAccount.perm_manage_parts === true;
-        case 'manage_parts':
-            return currentUserAccount.perm_manage_parts === true;
-        case 'view_feedback':
-            return currentUserAccount.perm_view_feedback === true;
-        case 'manage_qr':
-        case 'manage_players_qr':
-            return currentUserAccount.perm_manage_players_qr === true;
-        case 'manage_all_players':
-            return currentUserAccount.perm_manage_all_players === true;
-        default: {
-            const col = permKey.startsWith('perm_') ? permKey : `perm_${permKey}`;
-            return currentUserAccount[col] === true;
-        }
-    }
+function escHtml(s) {
+    return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
-function hasAnyTechCenterAccess() {
-    if (!isLoggedIn || !currentUserAccount) return false;
-    return hasPerm('power_off') || hasPerm('view_reports') || hasPerm('verify_highscores');
+function escJsArg(s) {
+    return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-function hasAnyAdminAreaAccess() {
-    if (!isLoggedIn || !currentUserAccount) return false;
-    return !!(
-        hasAnyTechCenterAccess() ||
-        hasPerm('request_parts') ||
-        hasPerm('manage_parts') ||
-        hasPerm('view_feedback') ||
-        hasPerm('manage_qr') ||
-        hasPerm('manage_all_players') ||
-        hasPerm('manage_accounts')
-    );
+function getPathSegments() {
+    return window.location.pathname
+        .replace(/\.html$/i, '')
+        .split('/')
+        .filter(Boolean);
 }
 
-// --- SCROLL-POSITION SPEICHERN & BEIM ZURÜCK-BUTTON WIEDERHERSTELLEN ---
-
-function getNormalizedPageKey() {
-    let p = window.location.pathname.replace(/\.html$/, '');
-    if (p.endsWith('/')) p += 'index';
-    return 'pinplay_scroll_' + p;
+function setNavOrigin(url) {
+    try { sessionStorage.setItem(NAV_ORIGIN_KEY, url); } catch (e) {}
 }
 
-function saveCurrentScrollPos() {
-    try {
-        sessionStorage.setItem(getNormalizedPageKey(), String(window.scrollY || 0));
-    } catch (e) {}
-}
-
-window.addEventListener('scroll', () => {
-    if (!isRestoringScroll) saveCurrentScrollPos();
-}, { passive: true });
-
-function navigateBackTo(targetUrl) {
-    sessionStorage.setItem(BACK_NAV_FLAG_KEY, 'true');
-    window.location.href = targetUrl;
-}
-
-function restoreScrollPositionIfNeeded() {
-    const navEntries = performance.getEntriesByType && performance.getEntriesByType('navigation');
-    const isBrowserBackForward = navEntries && navEntries.length > 0 && navEntries[0].type === 'back_forward';
-    const isCustomBack = sessionStorage.getItem(BACK_NAV_FLAG_KEY) === 'true';
-
-    if (isCustomBack || isBrowserBackForward) {
-        sessionStorage.removeItem(BACK_NAV_FLAG_KEY);
-        const savedY = parseInt(sessionStorage.getItem(getNormalizedPageKey()) || '0', 10);
-        if (savedY > 0) {
-            isRestoringScroll = true;
-            requestAnimationFrame(() => {
-                window.scrollTo({ top: savedY, behavior: 'instant' });
-                setTimeout(() => {
-                    window.scrollTo({ top: savedY, behavior: 'instant' });
-                    isRestoringScroll = false;
-                }, 80);
-            });
-            return;
-        }
-    }
-    setTimeout(() => { isRestoringScroll = false; }, 80);
-}
-
-// --- VISUELLES TOAST-BANNER ---
-
-function showActionToast(message, type = 'success', durationMs = 3500) {
-    let container = document.getElementById('pinplay-toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'pinplay-toast-container';
-        document.body.appendChild(container);
-    }
-
-    const toast = document.createElement('div');
-    const extraClass = type === 'error' ? 'toast-error' : (type === 'info' ? 'toast-info' : '');
-    toast.className = `pinplay-toast ${extraClass}`;
-    toast.innerText = message;
-    container.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.transition = 'opacity 0.25s ease';
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 260);
-    }, durationMs);
+function getNavOrigin(fallback = '/') {
+    try { return sessionStorage.getItem(NAV_ORIGIN_KEY) || fallback; } catch (e) { return fallback; }
 }
 
 function formatScore(num) {
@@ -245,100 +101,224 @@ function getFlipperImageUrl(rawValue) {
     return data ? data.publicUrl : null;
 }
 
-function normalizeReportStatus(rawStatus) {
-    if (!rawStatus) return 'offen';
-    const lower = String(rawStatus).trim().toLowerCase();
-    if (lower === 'behoben' || lower === 'erledigt' || lower === 'geschlossen') return 'behoben';
-    return 'offen';
+function normalizeReportStatus(raw) {
+    const l = String(raw || '').trim().toLowerCase();
+    return (l === 'behoben' || l === 'erledigt' || l === 'geschlossen') ? 'behoben' : 'offen';
 }
 
 function getStatusColorClass(status) {
-    if (status.includes("Defekt")) return "status-rot";
-    if (status.includes("Wartung") || status.includes("Eingeschränkt")) return "status-orange";
-    return "status-grün";
+    if (status.includes('Defekt')) return 'status-rot';
+    if (status.includes('Wartung') || status.includes('Eingeschränkt')) return 'status-orange';
+    return 'status-grün';
 }
 
-function stylePowerButton(btnElement, powerState) {
-    if (!btnElement) return;
-    btnElement.disabled = false;
-    btnElement.classList.remove('btn-busy');
-    btnElement.style.display = 'inline-block';
-    btnElement.innerText = powerState;
-    btnElement.style.backgroundColor = powerState === 'ON' ? '#16261b' : '#3b1818';
-    btnElement.style.color = powerState === 'ON' ? '#3fb950' : '#ff7b72';
-    btnElement.style.borderColor = powerState === 'ON' ? '#2ea043' : '#cf3432';
+function stylePowerButton(btn, state) {
+    if (!btn) return;
+    btn.disabled = false;
+    btn.classList.remove('btn-busy');
+    btn.style.display = 'inline-block';
+    btn.innerText = state;
+    btn.style.backgroundColor = state === 'ON' ? '#16261b' : '#3b1818';
+    btn.style.color = state === 'ON' ? '#3fb950' : '#ff7b72';
+    btn.style.borderColor = state === 'ON' ? '#2ea043' : '#cf3432';
+}
+
+// --- RECHTESYSTEM (EXAKT SYNCHRON MIT SUPABASE RLS) ---
+
+function isRootAccount(acc = currentUserAccount) {
+    return !!(acc && String(acc.email || '').trim().toLowerCase() === ROOT_ACCOUNT_EMAIL);
+}
+
+function hasPerm(permKey) {
+    if (!isLoggedIn || !currentUserAccount) return false;
+    if (isRootAccount(currentUserAccount) || currentUserAccount.perm_manage_accounts === true) return true;
+
+    switch (permKey) {
+        case 'admin':
+        case 'manage_accounts':
+            return false;
+        case 'no_qr':
+            return currentUserAccount.perm_no_qr === true;
+        case 'power_off':
+            return currentUserAccount.perm_power_off === true;
+        case 'auto_verify_reports':
+            return currentUserAccount.perm_auto_verify_reports === true;
+        case 'view_reports':
+            return currentUserAccount.perm_view_reports === true || currentUserAccount.perm_manage_reports === true;
+        case 'manage_reports':
+            return currentUserAccount.perm_manage_reports === true;
+        case 'auto_verify_highscores':
+            return currentUserAccount.perm_auto_verify_highscores === true;
+        case 'verify_highscores':
+            return currentUserAccount.perm_verify_highscores === true;
+        case 'request_parts':
+            return currentUserAccount.perm_request_parts === true || currentUserAccount.perm_manage_parts === true;
+        case 'manage_parts':
+            return currentUserAccount.perm_manage_parts === true;
+        case 'view_feedback':
+            return currentUserAccount.perm_view_feedback === true;
+        case 'manage_qr':
+        case 'manage_players_qr':
+            return currentUserAccount.perm_manage_players_qr === true;
+        case 'view_logs':
+            return !!(
+                currentUserAccount.perm_power_off ||
+                currentUserAccount.perm_view_reports ||
+                currentUserAccount.perm_manage_reports ||
+                currentUserAccount.perm_verify_highscores ||
+                currentUserAccount.perm_request_parts ||
+                currentUserAccount.perm_manage_parts ||
+                currentUserAccount.perm_view_feedback
+            );
+        default:
+            return false;
+    }
+}
+
+function hasAnyTechCenterAccess() {
+    return hasPerm('power_off') || hasPerm('view_reports') || hasPerm('verify_highscores') || hasPerm('view_feedback') || hasPerm('view_logs');
+}
+
+function hasPinballTechViewAccess() {
+    return hasPerm('view_reports') || hasPerm('verify_highscores');
+}
+
+function getDefaultTechUrl() {
+    if (hasPerm('power_off') || hasPerm('view_reports') || hasPerm('verify_highscores')) return '/technik';
+    if (hasPerm('view_feedback')) return '/technik/feedback';
+    return '/technik/logs';
 }
 
 function ensureWritePermission() {
-    if (hasPerm('no_qr') || hasValidDailyToken) {
-        return true;
-    }
-    showActionToast("Zugangssperre: Bitte scanne zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!", "error", 4500);
+    if (hasPerm('no_qr') || hasValidDailyToken) return true;
+    showActionToast('Zugangssperre: Bitte scanne zuerst den aktuellen Tages-QR-Code vor Ort im Pin&Play!', 'error', 4500);
     return false;
 }
 
-// --- SPIELER-ALIAS & FLIPPER-SPEZIFISCHE NAMENS-VERKNÜPFUNG ---
+// --- ACCOUNT-INITIALEN (ERSETZEN SPIELERPROFILE & PINS) ---
 
-function resolvePlayerProfile(rawInput) {
-    if (!rawInput) return null;
-    const norm = String(rawInput).trim().toUpperCase();
+function resolveAccountTag(rawInput, pinballId = null) {
+    const norm = String(rawInput || '').trim().toUpperCase();
     if (!norm) return null;
+    const pinKey = pinballId !== null && pinballId !== undefined ? String(pinballId) : null;
 
-    return playersDB.find(pl => {
-        if (pl.displayName.toUpperCase() === norm) return true;
-        if (pl.shortInitials.toUpperCase() === norm) return true;
-        if (pl.aliases.some(a => a.toUpperCase() === norm)) return true;
-        if (pl.flipperTags && Object.values(pl.flipperTags).some(v => String(v).toUpperCase() === norm)) return true;
+    return playerTagsDB.find((t) => {
+        if (t.shortTag && t.shortTag === norm) return true;
+        if (pinKey && t.flipperTags && String(t.flipperTags[pinKey] || '').toUpperCase() === norm) return true;
+        if (!pinKey && t.flipperTags && Object.values(t.flipperTags).some((v) => String(v).toUpperCase() === norm)) return true;
         return false;
     }) || null;
 }
 
-function isSamePlayerIdentity(nameA, nameB) {
-    const normA = String(nameA || '').trim().toUpperCase();
-    const normB = String(nameB || '').trim().toUpperCase();
-    if (!normA || !normB) return false;
-    if (normA === normB) return true;
-    const profA = resolvePlayerProfile(normA);
-    const profB = resolvePlayerProfile(normB);
-    return !!(profA && profB && profA.id === profB.id);
-}
+function getAccountInitialsForPinball(acc, pin) {
+    if (!acc || !pin) return '';
+    const maxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
+    const shortTag = String(acc.short_tag || acc.shortTag || '').trim().toUpperCase();
+    const fTags = acc.flipper_tags || acc.flipperTags || {};
 
-function getProfileNameForPinball(prof, pin) {
-    if (!prof || !pin) return '';
-    const effectiveMaxLen = pin.hsMaxLength === 0 ? 3 : pin.hsMaxLength;
-    if (effectiveMaxLen <= 3) {
-        return (prof.shortInitials || prof.displayName).toUpperCase().substring(0, 3);
+    if (maxLen > 3) {
+        const custom = String(fTags[String(pin.id)] || '').trim().toUpperCase();
+        if (custom) return custom.substring(0, maxLen);
     }
-    const customForPin = prof.flipperTags ? prof.flipperTags[String(pin.id)] : null;
-    if (customForPin && String(customForPin).trim() !== '') {
-        return String(customForPin).trim().toUpperCase().substring(0, effectiveMaxLen);
+    return shortTag.substring(0, Math.min(3, maxLen));
+}
+
+function isSamePlayerIdentity(nameA, nameB, pinballId = null) {
+    const a = String(nameA || '').trim().toUpperCase();
+    const b = String(nameB || '').trim().toUpperCase();
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const accA = resolveAccountTag(a, pinballId);
+    const accB = resolveAccountTag(b, pinballId);
+    return !!(accA && accB && accA.userId === accB.userId);
+}
+
+function getFormattedPlayerDisplay(rawInitials, pinballId = null) {
+    const upper = String(rawInitials || '').trim().toUpperCase();
+    const acc = resolveAccountTag(upper, pinballId);
+    if (!acc || !acc.displayName) return upper;
+    if (upper === acc.displayName.toUpperCase()) return acc.displayName;
+    return `${upper} (${acc.displayName})`;
+}
+
+function isInitialsReservedByOther(rawInitials, pinballId) {
+    const acc = resolveAccountTag(rawInitials, pinballId);
+    if (!acc) return null;
+    if (isLoggedIn && currentUserAccount && acc.userId === currentUserAccount.user_id) return null;
+    return acc;
+}
+
+// --- SCROLL-POSITION & TOASTS ---
+
+function getScrollKey() {
+    return 'pinplay_scroll_' + (window.location.pathname || '/');
+}
+
+function saveCurrentScrollPos() {
+    try { sessionStorage.setItem(getScrollKey(), String(window.scrollY || 0)); } catch (e) {}
+}
+
+window.addEventListener('scroll', () => {
+    if (!isRestoringScroll) saveCurrentScrollPos();
+}, { passive: true });
+
+function navigateBackTo(targetUrl) {
+    sessionStorage.setItem(BACK_NAV_FLAG_KEY, 'true');
+    window.location.href = targetUrl;
+}
+
+function restoreScrollPositionIfNeeded() {
+    const nav = performance.getEntriesByType && performance.getEntriesByType('navigation');
+    const isBrowserBack = nav && nav.length > 0 && nav[0].type === 'back_forward';
+    const isCustomBack = sessionStorage.getItem(BACK_NAV_FLAG_KEY) === 'true';
+
+    if (isCustomBack || isBrowserBack) {
+        sessionStorage.removeItem(BACK_NAV_FLAG_KEY);
+        const y = parseInt(sessionStorage.getItem(getScrollKey()) || '0', 10);
+        if (y > 0) {
+            isRestoringScroll = true;
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: y, behavior: 'instant' });
+                setTimeout(() => { window.scrollTo({ top: y, behavior: 'instant' }); isRestoringScroll = false; }, 70);
+            });
+            return;
+        }
     }
-    return prof.displayName.toUpperCase().substring(0, effectiveMaxLen);
+    setTimeout(() => { isRestoringScroll = false; }, 70);
 }
 
-function getFormattedPlayerDisplay(rawInitials) {
-    const prof = resolvePlayerProfile(rawInitials);
-    if (!prof) return rawInitials;
-    const upperRaw = String(rawInitials).trim().toUpperCase();
-    if (upperRaw === prof.displayName.toUpperCase()) return prof.displayName;
-    return `${upperRaw} (${prof.displayName})`;
+function showActionToast(message, type = 'success', durationMs = 3500) {
+    let box = document.getElementById('pinplay-toast-container');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'pinplay-toast-container';
+        document.body.appendChild(box);
+    }
+    const toast = document.createElement('div');
+    toast.className = `pinplay-toast ${type === 'error' ? 'toast-error' : (type === 'info' ? 'toast-info' : '')}`;
+    toast.innerText = message;
+    box.appendChild(toast);
+    setTimeout(() => {
+        toast.style.transition = 'opacity 0.25s ease';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 260);
+    }, durationMs);
 }
 
-// --- REIN RECHTEBASIERTES HEADER-BANNER (OHNE TECHNIKERMODUS) ---
+// --- HEADER & GEMEINSAME TECHNIK-NAVIGATION ---
 
-function getActiveNavTab() {
-    const path = window.location.pathname;
-    if (path.endsWith('highscores') || path.endsWith('highscores.html')) return 'highscores';
-    if (path.endsWith('tech-feed') || path.endsWith('tech-feed.html') || path.endsWith('techniker') || path.endsWith('techniker.html') || path.endsWith('tech-detail') || path.endsWith('tech-detail.html')) return 'tech-feed';
-    if (path.endsWith('tech-parts') || path.endsWith('tech-parts.html')) return 'tech-parts';
-    if (path.endsWith('tech-feedback') || path.endsWith('tech-feedback.html')) return 'tech-feedback';
-    if (path.endsWith('tech-players') || path.endsWith('tech-players.html')) return 'tech-players';
-    if (path.endsWith('tech-accounts') || path.endsWith('tech-accounts.html')) return 'tech-accounts';
+function getActiveTopSection() {
+    const seg = getPathSegments()[0] || '';
+    if (seg === 'highscores') return 'highscores';
+    if (seg === 'technik') return 'technik';
+    if (seg === 'ersatzteile') return 'ersatzteile';
+    if (seg === 'qr' || seg === 'accounts') return 'verwaltung';
+    if (seg === 'konto') return 'konto';
     return 'overview';
 }
 
 function closeAllHeaderDropdowns() {
-    document.querySelectorAll('.nav-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    document.querySelectorAll('.nav-dropdown-menu').forEach((m) => m.classList.add('hidden'));
 }
 
 function toggleHeaderDropdown(menuId, event) {
@@ -356,83 +336,58 @@ function renderSharedHeader() {
     const header = document.getElementById('main-header');
     if (!header) return;
 
-    const hasStaffRights = hasAnyAdminAreaAccess();
-    if (hasStaffRights) header.classList.add('tech-mode');
-    else header.classList.remove('tech-mode');
+    const isStaff = isLoggedIn && (hasAnyTechCenterAccess() || hasPerm('request_parts') || hasPerm('manage_qr') || hasPerm('manage_accounts'));
+    header.classList.toggle('staff-header', isStaff);
 
-    const activeTab = getActiveNavTab();
-    const cls = (tab) => activeTab === tab ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
+    const active = getActiveTopSection();
+    const cls = (key) => (active === key ? 'btn-nav-page btn-nav-active' : 'btn-nav-page');
 
-    let rightBasedButtonsHtml = '';
-    let manageMenuItems = [];
-
+    let navHtml = '';
     if (isLoggedIn) {
-        // 1. Technik-Center (ersetzt Techniker-Dashboard + News-Feed)
         if (hasAnyTechCenterAccess()) {
-            const unverifReps = hasPerm('view_reports') ? reportsDB.filter(r => r.status === 'offen' && !r.verifiziert).length : 0;
-            const unverifHs = hasPerm('verify_highscores') ? highscoresDB.filter(h => !h.verifiziert).length : 0;
-            const totalUnverif = unverifReps + unverifHs;
-            const badge = totalUnverif > 0 ? `<span class="badge-nav-count">${totalUnverif}</span>` : '';
-            rightBasedButtonsHtml += `<button class="${cls('tech-feed')}" onclick="window.location.href='tech-feed'">Technik${badge}</button>`;
+            const unverifReps = hasPerm('view_reports') ? reportsDB.filter((r) => r.status === 'offen' && !r.verifiziert).length : 0;
+            const unverifHs = hasPerm('verify_highscores') ? highscoresDB.filter((h) => !h.verifiziert).length : 0;
+            const badge = (unverifReps + unverifHs) > 0 ? `<span class="badge-nav-count">${unverifReps + unverifHs}</span>` : '';
+            navHtml += `<button class="${cls('technik')}" onclick="window.location.href='${getDefaultTechUrl()}'">Technik${badge}</button>`;
         }
 
-        // 2. Ersatzteile & Inventar
         if (hasPerm('request_parts') || hasPerm('manage_parts') || hasPerm('view_reports')) {
-            const openParts = partsOrdersDB.filter(p => p.status === 'benoetigt').length;
-            const partsBadge = openParts > 0 ? `<span class="badge-nav-count count-gold">${openParts}</span>` : '';
-            rightBasedButtonsHtml += `<button class="${cls('tech-parts')}" onclick="window.location.href='tech-parts'">Ersatzteile${partsBadge}</button>`;
+            const openParts = partsOrdersDB.filter((p) => p.status === 'benoetigt').length;
+            const badge = openParts > 0 ? `<span class="badge-nav-count count-gold">${openParts}</span>` : '';
+            navHtml += `<button class="${cls('ersatzteile')}" onclick="window.location.href='/ersatzteile'">Ersatzteile${badge}</button>`;
         }
 
-        // 3. Verwaltung-Dropdown (rein rechtebasiert, QR getrennt von Spielerprofilen)
-        if (hasPerm('view_feedback')) {
-            const fbBadge = feedbackDB.length > 0 ? `<span class="badge-nav-count count-gold">${feedbackDB.length}</span>` : '';
-            manageMenuItems.push(`<button class="nav-dropdown-item ${activeTab === 'tech-feedback' ? 'item-active' : ''}" onclick="window.location.href='tech-feedback'"><span>Spieler-Feedback</span>${fbBadge}</button>`);
-        }
+        const manageItems = [];
+        const seg = getPathSegments()[0] || '';
         if (hasPerm('manage_qr')) {
-            manageMenuItems.push(`<button class="nav-dropdown-item" onclick="window.location.href='tech-players?view=qr'"><span>Tages-QR-Code</span></button>`);
-            manageMenuItems.push(`<button class="nav-dropdown-item" onclick="window.open('tv-highscores', '_blank')"><span>100"-TV Highscores</span><span>↗</span></button>`);
-        }
-        if (hasPerm('manage_all_players')) {
-            manageMenuItems.push(`<button class="nav-dropdown-item" onclick="window.location.href='tech-players?view=all'"><span>Alle Spieler-Profile</span></button>`);
+            manageItems.push(`<button class="nav-dropdown-item ${seg === 'qr' ? 'item-active' : ''}" onclick="window.location.href='/qr'"><span>Tages-QR</span></button>`);
+            manageItems.push(`<button class="nav-dropdown-item" onclick="window.open('/tv', '_blank')"><span>TV-Display</span><span>↗</span></button>`);
         }
         if (hasPerm('manage_accounts')) {
-            manageMenuItems.push(`<button class="nav-dropdown-item ${activeTab === 'tech-accounts' ? 'item-active' : ''}" onclick="window.location.href='tech-accounts'"><span>Accounts &amp; Rechte</span></button>`);
+            manageItems.push(`<button class="nav-dropdown-item ${seg === 'accounts' ? 'item-active' : ''}" onclick="window.location.href='/accounts'"><span>Accounts</span></button>`);
         }
-
-        if (manageMenuItems.length > 0) {
-            const manageActive = ['tech-feedback', 'tech-accounts'].includes(activeTab);
-            const manageBtnClass = manageActive ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
-            const manageCount = hasPerm('view_feedback') ? feedbackDB.length : 0;
-            const manageBadge = manageCount > 0 ? `<span class="badge-nav-count count-gold">${manageCount}</span>` : '';
-
-            rightBasedButtonsHtml += `
+        if (manageItems.length > 0) {
+            navHtml += `
                 <div class="nav-dropdown">
-                    <button class="${manageBtnClass}" onclick="toggleHeaderDropdown('header-manage-menu', event)">Verwaltung${manageBadge} ▾</button>
+                    <button class="${cls('verwaltung')}" onclick="toggleHeaderDropdown('header-manage-menu', event)">Verwaltung ▾</button>
                     <div id="header-manage-menu" class="nav-dropdown-menu hidden" onclick="event.stopPropagation()">
-                        ${manageMenuItems.join('')}
+                        ${manageItems.join('')}
                     </div>
                 </div>
             `;
         }
-    }
 
-    // Account-Dropdown (inkl. "Mein Spieler-Profil" für jeden eingeloggten Account)
-    let accountMenuHtml = '';
-    if (isLoggedIn) {
-        const displayName = (currentUserAccount && currentUserAccount.display_name) ? currentUserAccount.display_name : 'Account';
-        const roleLabel = (currentUserAccount && currentUserAccount.role_label) ? currentUserAccount.role_label : '';
-        const safeName = displayName.replace(/</g, '&lt;');
-        const safeRole = roleLabel.replace(/</g, '&lt;');
-
-        accountMenuHtml = `
+        const name = escHtml((currentUserAccount && currentUserAccount.display_name) || 'Account');
+        const role = escHtml((currentUserAccount && currentUserAccount.role_label) || 'Eingeloggt');
+        navHtml += `
             <div class="nav-dropdown">
-                <button class="btn-nav-util" onclick="toggleHeaderDropdown('header-account-menu', event)">${safeName} ▾</button>
+                <button class="btn-nav-util" onclick="toggleHeaderDropdown('header-account-menu', event)">${name} ▾</button>
                 <div id="header-account-menu" class="nav-dropdown-menu hidden" onclick="event.stopPropagation()">
                     <div class="nav-dropdown-header">
-                        <strong>${safeName}</strong>
-                        <span>${safeRole || 'Eingeloggt'}</span>
+                        <strong>${name}</strong>
+                        <span>${role}</span>
                     </div>
-                    <button class="nav-dropdown-item" onclick="window.location.href='tech-players?view=me'"><span>Mein Spieler-Profil</span></button>
+                    <button class="nav-dropdown-item ${active === 'konto' ? 'item-active' : ''}" onclick="window.location.href='/konto'"><span>Initialen</span></button>
                     <button class="nav-dropdown-item item-danger" onclick="doLogout()"><span>Logout</span></button>
                 </div>
             </div>
@@ -440,19 +395,50 @@ function renderSharedHeader() {
     }
 
     header.innerHTML = `
-        <a href="${OFFICIAL_HOMEPAGE_URL}" class="logo" title="Zur offiziellen Pin&Play Homepage">
-            <img src="logo.png" alt="Pin & Play Retro Gaming" class="logo-img">
+        <a href="/" class="logo" title="Pin&Play Übersicht">
+            <img src="/logo.png" alt="Pin & Play Retro Gaming" class="logo-img">
         </a>
         <div class="quick-actions">
-            <button class="${cls('overview')}" onclick="goHome()">Übersicht</button>
-            <button class="${cls('highscores')}" onclick="window.location.href='highscores'">Highscores</button>
-            ${rightBasedButtonsHtml}
-            ${accountMenuHtml}
+            <button class="${cls('overview')}" onclick="window.location.href='/'">Übersicht</button>
+            <button class="${cls('highscores')}" onclick="window.location.href='/highscores'">Highscores</button>
+            ${navHtml}
         </div>
     `;
 }
 
-// --- LOGIN / LOGOUT (KEIN BACKDROP-SCHLIESSEN BEIM NEBENKLICKEN) ---
+// Gemeinsame Tab-Leiste für das aufgeteilte Technik-Center (ohne ? in der URL)
+function renderTechSubnav(containerId, activeKey) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+
+    const canRep = hasPerm('view_reports');
+    const canHs = hasPerm('verify_highscores');
+    const canDash = hasPerm('power_off') || canRep || canHs;
+    const canFb = hasPerm('view_feedback');
+    const canLogs = hasPerm('view_logs');
+
+    const unverif = (canRep ? reportsDB.filter((r) => r.status === 'offen' && !r.verifiziert).length : 0)
+        + (canHs ? highscoresDB.filter((h) => !h.verifiziert).length : 0);
+    const openCnt = canRep ? reportsDB.filter((r) => r.status === 'offen').length : 0;
+    const resCnt = canRep ? reportsDB.filter((r) => r.status === 'behoben').length : 0;
+    const hsCnt = canHs ? highscoresDB.length : 0;
+    const fbCnt = canFb ? feedbackDB.length : 0;
+
+    const tabs = [];
+    if (canDash) tabs.push({ key: 'dashboard', href: '/technik', label: 'Flipper', cls: 'active-open' });
+    if (canRep || canHs) tabs.push({ key: 'eingang', href: '/technik/eingang', label: `Eingang (${unverif})`, cls: 'active-highscore' });
+    if (canRep) tabs.push({ key: 'defekte', href: '/technik/defekte', label: `Defekte (${openCnt})`, cls: 'active-open' });
+    if (canRep) tabs.push({ key: 'archiv', href: '/technik/archiv', label: `Archiv (${resCnt})`, cls: 'active-resolved' });
+    if (canHs) tabs.push({ key: 'highscores', href: '/technik/highscores', label: `Highscores (${hsCnt})`, cls: 'active-highscore' });
+    if (canFb) tabs.push({ key: 'feedback', href: '/technik/feedback', label: `Feedback (${fbCnt})`, cls: 'active-open' });
+    if (canLogs) tabs.push({ key: 'logs', href: '/technik/logs', label: 'Logs', cls: 'active-open' });
+
+    el.innerHTML = tabs.map((t) =>
+        `<a href="${t.href}" class="report-tab-btn ${activeKey === t.key ? t.cls : ''}">${t.label}</a>`
+    ).join('');
+}
+
+// --- LOGIN / LOGOUT (KEIN NEBENKLICK-SCHLIESSEN) ---
 
 function ensureLoginModalExists() {
     if (document.getElementById('global-login-modal')) return;
@@ -471,107 +457,91 @@ function ensureLoginModalExists() {
                 <label><strong>Passwort</strong></label>
                 <input type="password" id="login-pwd" onkeydown="if(event.key==='Enter') doLogin()">
                 <button class="btn-green" style="width: 100%; padding: 14px;" onclick="doLogin()">Einloggen</button>
-                <p id="login-error" style="color: #ff7b72; display: none; margin-top: 15px; font-weight: bold;"></p>
+                <p id="login-error" style="color: #ff7b72; display: none; margin-top: 14px; font-weight: bold;"></p>
             </div>
         </div>
     `;
     document.body.appendChild(modal);
 }
 
-function checkHashLogin() {
+function checkLoginRoute() {
     ensureLoginModalExists();
     const modal = document.getElementById('global-login-modal');
-    if (window.location.hash === '#login') {
-        if (isLoggedIn) {
-            window.location.hash = '';
-            const savedRedirect = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
-            if (savedRedirect) {
-                sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
-                window.location.href = savedRedirect;
-                return;
-            }
-            window.location.href = './';
-        } else {
-            modal.classList.remove('hidden');
+    const isLoginPath = window.location.pathname.replace(/\/$/, '') === '/login' || window.location.hash === '#login';
+    if (!isLoginPath) return;
+
+    if (isLoggedIn) {
+        const saved = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+        if (saved) {
+            sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+            window.location.href = saved;
+            return;
         }
+        window.history.replaceState({}, '', '/');
+        if (hasAnyTechCenterAccess()) window.location.href = getDefaultTechUrl();
+    } else {
+        modal.classList.remove('hidden');
     }
 }
 
 function closeLoginModal() {
-    window.location.hash = '';
     const modal = document.getElementById('global-login-modal');
     if (modal) modal.classList.add('hidden');
+    if (window.location.pathname.replace(/\/$/, '') === '/login' || window.location.hash === '#login') {
+        window.history.replaceState({}, '', '/');
+    }
 }
 
 function redirectToLoginWithReturn() {
-    try {
-        sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, window.location.href);
-    } catch (e) {}
-    window.location.href = './#login';
+    try { sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, window.location.pathname); } catch (e) {}
+    window.location.href = '/login';
 }
 
 async function doLogin() {
     const email = document.getElementById('login-email').value.trim();
     const pwd = document.getElementById('login-pwd').value;
-    const errDisplay = document.getElementById('login-error');
+    const errEl = document.getElementById('login-error');
 
     const { data, error } = await db.auth.signInWithPassword({ email, password: pwd });
     if (error) {
-        errDisplay.innerText = "Login fehlgeschlagen: " + error.message;
-        errDisplay.style.display = 'block';
-    } else {
-        errDisplay.style.display = 'none';
-        window.location.hash = '';
-        isLoggedIn = true;
-        localStorage.setItem('pinplay_logged_in', 'true');
-        localStorage.removeItem('pinplay_tech_mode');
-        localStorage.removeItem(CACHE_KEY_STATE);
-
-        await loadCurrentUserAccount(data?.user?.id);
-
-        const savedRedirect = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
-        if (savedRedirect) {
-            sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
-            window.location.href = savedRedirect;
-            return;
-        }
-
-        window.location.href = hasAnyTechCenterAccess() ? 'tech-feed?tab=dashboard' : './';
+        errEl.innerText = 'Login fehlgeschlagen: ' + error.message;
+        errEl.style.display = 'block';
+        return;
     }
+
+    errEl.style.display = 'none';
+    isLoggedIn = true;
+    localStorage.setItem('pinplay_logged_in', 'true');
+    localStorage.removeItem(CACHE_KEY_STATE);
+    await loadCurrentUserAccount(data?.user?.id);
+
+    const saved = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+    if (saved) {
+        sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+        window.location.href = saved;
+        return;
+    }
+    window.location.href = hasAnyTechCenterAccess() ? getDefaultTechUrl() : '/';
 }
 
 async function doLogout() {
-    if (!confirm("Möchtest du dich wirklich ausloggen?")) return;
+    if (!confirm('Möchtest du dich wirklich ausloggen?')) return;
     await db.auth.signOut();
-    localStorage.removeItem('pinplay_tech_mode');
     localStorage.removeItem('pinplay_logged_in');
     localStorage.removeItem(CACHE_KEY_STATE);
-    window.location.href = './';
+    window.location.href = '/';
 }
 
-function goHome() {
-    window.location.href = './';
-}
+window.addEventListener('hashchange', checkLoginRoute);
 
-window.addEventListener('hashchange', checkHashLogin);
-
-// --- CACHE, SESSION & 15-SEKUNDEN-SYNC ---
+// --- CACHE, DATENBANK-SYNC & MEDIEN ---
 
 function saveStateToCache() {
     try {
         localStorage.setItem(CACHE_KEY_STATE, JSON.stringify({
-            pinballs,
-            reportsDB,
-            highscoresDB,
-            feedbackDB,
-            playersDB,
-            partsOrdersDB,
-            partsCatalogDB,
-            partsTagsDB,
-            accountsDB,
-            currentUserAccount,
-            hasValidDailyToken,
-            timestamp: Date.now()
+            pinballs, reportsDB, highscoresDB, feedbackDB, playerTagsDB,
+            partsOrdersDB, partsCatalogDB, partsTagsDB, accountsDB,
+            currentUserAccount, hasValidDailyToken, timestamp: Date.now()
         }));
     } catch (e) {}
 }
@@ -580,24 +550,23 @@ function restoreStateFromCache() {
     try {
         const raw = localStorage.getItem(CACHE_KEY_STATE);
         if (!raw) return { loaded: false, isFresh: false };
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed.pinballs) && parsed.pinballs.length > 0) {
-            pinballs = parsed.pinballs;
-            reportsDB = parsed.reportsDB || [];
-            highscoresDB = parsed.highscoresDB || [];
-            feedbackDB = parsed.feedbackDB || [];
-            playersDB = parsed.playersDB || [];
-            partsOrdersDB = parsed.partsOrdersDB || [];
-            partsCatalogDB = parsed.partsCatalogDB || [];
-            partsTagsDB = parsed.partsTagsDB || [];
-            accountsDB = parsed.accountsDB || [];
-            currentUserAccount = parsed.currentUserAccount || null;
-            hasValidDailyToken = parsed.hasValidDailyToken === true;
-            const age = Date.now() - (parsed.timestamp || 0);
-            return { loaded: true, isFresh: age < CACHE_TTL_MS };
-        }
-    } catch (e) {}
-    return { loaded: false, isFresh: false };
+        const p = JSON.parse(raw);
+        if (!Array.isArray(p.pinballs) || p.pinballs.length === 0) return { loaded: false, isFresh: false };
+        pinballs = p.pinballs;
+        reportsDB = p.reportsDB || [];
+        highscoresDB = p.highscoresDB || [];
+        feedbackDB = p.feedbackDB || [];
+        playerTagsDB = p.playerTagsDB || [];
+        partsOrdersDB = p.partsOrdersDB || [];
+        partsCatalogDB = p.partsCatalogDB || [];
+        partsTagsDB = p.partsTagsDB || [];
+        accountsDB = p.accountsDB || [];
+        currentUserAccount = p.currentUserAccount || null;
+        hasValidDailyToken = p.hasValidDailyToken === true;
+        return { loaded: true, isFresh: (Date.now() - (p.timestamp || 0)) < CACHE_TTL_MS };
+    } catch (e) {
+        return { loaded: false, isFresh: false };
+    }
 }
 
 async function verifyDailyTokenStatus() {
@@ -606,61 +575,38 @@ async function verifyDailyTokenStatus() {
         return;
     }
     const token = localStorage.getItem(DAILY_TOKEN_KEY) || '';
-    if (!token) {
-        hasValidDailyToken = false;
-        return;
-    }
+    if (!token) { hasValidDailyToken = false; return; }
     try {
         const { data, error } = await db.rpc('check_my_daily_token', { p_token: token });
         hasValidDailyToken = !error && data === true;
-        if (!hasValidDailyToken) {
-            localStorage.removeItem(DAILY_TOKEN_KEY);
-        }
+        if (!hasValidDailyToken) localStorage.removeItem(DAILY_TOKEN_KEY);
     } catch (e) {
         hasValidDailyToken = false;
     }
 }
 
-async function loadCurrentUserAccount(explicitUserId = null) {
-    if (!isLoggedIn) {
-        currentUserAccount = null;
-        return;
-    }
+async function loadCurrentUserAccount(explicitUid = null) {
+    if (!isLoggedIn) { currentUserAccount = null; return; }
     try {
-        let uid = explicitUserId;
+        let uid = explicitUid;
         if (!uid) {
             const { data } = await db.auth.getSession();
             uid = data?.session?.user?.id || null;
         }
-        if (!uid) {
-            currentUserAccount = null;
-            return;
-        }
-        const { data: accData, error } = await db
-            .from('user_accounts')
-            .select('*')
-            .eq('user_id', uid)
-            .maybeSingle();
-
-        if (!error && accData) {
-            currentUserAccount = accData;
-        } else {
-            currentUserAccount = null;
-        }
+        if (!uid) { currentUserAccount = null; return; }
+        const { data: acc, error } = await db.from('user_accounts').select('*').eq('user_id', uid).maybeSingle();
+        currentUserAccount = (!error && acc) ? acc : null;
     } catch (e) {}
 }
 
 function startLiveSyncPolling() {
     if (liveSyncTimer) clearInterval(liveSyncTimer);
     liveSyncTimer = setInterval(async () => {
-        if (document.hidden) return;
-        if (!isLoggedIn && !hasValidDailyToken) return;
+        if (document.hidden || (!isLoggedIn && !hasValidDailyToken)) return;
         try {
             await loadAllDatabaseData();
             renderSharedHeader();
-            if (typeof currentPageUpdateCallback === 'function') {
-                currentPageUpdateCallback();
-            }
+            if (typeof currentPageUpdateCallback === 'function') currentPageUpdateCallback();
         } catch (e) {}
     }, LIVE_SYNC_INTERVAL_MS);
 }
@@ -668,10 +614,9 @@ function startLiveSyncPolling() {
 async function initSharedApp(onBackgroundUpdate = null) {
     currentPageUpdateCallback = onBackgroundUpdate;
     isLoggedIn = localStorage.getItem('pinplay_logged_in') === 'true';
-    localStorage.removeItem('pinplay_tech_mode');
     const cacheStatus = restoreStateFromCache();
     renderSharedHeader();
-    checkHashLogin();
+    checkLoginRoute();
 
     if (cacheStatus.loaded) {
         if (isLoggedIn && !currentUserAccount) {
@@ -681,8 +626,6 @@ async function initSharedApp(onBackgroundUpdate = null) {
         if (!hasValidDailyToken && (hasPerm('no_qr') || localStorage.getItem(DAILY_TOKEN_KEY))) {
             await verifyDailyTokenStatus();
             saveStateToCache();
-        } else {
-            verifyDailyTokenStatus().then(() => startLiveSyncPolling());
         }
         startLiveSyncPolling();
         setTimeout(restoreScrollPositionIfNeeded, 20);
@@ -712,18 +655,13 @@ async function initSharedApp(onBackgroundUpdate = null) {
 async function syncSessionInBackground() {
     try {
         const { data } = await db.auth.getSession();
-        const realLoggedIn = data.session !== null;
-        if (realLoggedIn !== isLoggedIn) {
-            isLoggedIn = realLoggedIn;
+        const real = data.session !== null;
+        if (real !== isLoggedIn) {
+            isLoggedIn = real;
             if (!isLoggedIn) {
                 localStorage.removeItem('pinplay_logged_in');
                 currentUserAccount = null;
-                feedbackDB = [];
-                reportsDB = [];
-                partsOrdersDB = [];
-                partsCatalogDB = [];
-                partsTagsDB = [];
-                accountsDB = [];
+                feedbackDB = []; reportsDB = []; partsOrdersDB = []; partsCatalogDB = []; partsTagsDB = []; accountsDB = [];
             } else {
                 localStorage.setItem('pinplay_logged_in', 'true');
                 await loadCurrentUserAccount(data.session.user.id);
@@ -738,74 +676,63 @@ async function syncSessionInBackground() {
 }
 
 async function loadAllDatabaseData() {
-    if (isLoggedIn) {
-        await loadCurrentUserAccount();
-    }
+    if (isLoggedIn) await loadCurrentUserAccount();
 
-    const canReadReports = hasPerm('view_reports');
-    const canReadFeedback = hasPerm('view_feedback');
-    const canReadParts = hasPerm('request_parts') || hasPerm('manage_parts') || hasPerm('view_reports');
-    const canReadAccounts = hasPerm('manage_accounts');
+    const canRep = hasPerm('view_reports');
+    const canFb = hasPerm('view_feedback');
+    const canParts = hasPerm('request_parts') || hasPerm('manage_parts') || hasPerm('view_reports');
+    const canAcc = hasPerm('manage_accounts');
 
-    const queries = [
+    const res = await Promise.all([
         db.from('flipper').select('*').order('name', { ascending: true }),
         db.from('designer').select('*'),
         db.from('highscore').select('*').order('score', { ascending: false }),
-        db.from('players').select('*').order('display_name', { ascending: true }),
-        canReadReports ? db.from('reports').select('*') : Promise.resolve({ data: [] }),
-        canReadFeedback ? db.from('feedback').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
-        canReadParts ? db.from('parts_orders').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
-        canReadParts ? db.from('parts_catalog').select('*').order('part_name', { ascending: true }) : Promise.resolve({ data: [] }),
-        canReadParts ? db.from('parts_tags').select('*').order('name', { ascending: true }) : Promise.resolve({ data: [] }),
-        canReadAccounts ? db.from('user_accounts').select('*').order('display_name', { ascending: true }) : Promise.resolve({ data: [] })
-    ];
+        db.rpc('get_public_player_tags'),
+        canRep ? db.from('reports').select('*') : Promise.resolve({ data: [] }),
+        canFb ? db.from('feedback').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+        canParts ? db.from('parts_orders').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+        canParts ? db.from('parts_catalog').select('*').order('part_name', { ascending: true }) : Promise.resolve({ data: [] }),
+        canParts ? db.from('parts_tags').select('*').order('name', { ascending: true }) : Promise.resolve({ data: [] }),
+        canAcc ? db.from('user_accounts').select('*').order('display_name', { ascending: true }) : Promise.resolve({ data: [] })
+    ]);
 
-    const results = await Promise.all(queries);
-    const dbPins = results[0].data;
-    const dbDes = results[1].data;
-    const dbHs = results[2].data;
-    const dbPlayers = results[3] && !results[3].error ? results[3].data : [];
-    const dbReps = (results[4] && !results[4].error) ? results[4].data : [];
-    const dbFb = (results[5] && !results[5].error) ? results[5].data : [];
-    const dbPartsOrders = (results[6] && !results[6].error) ? results[6].data : [];
-    const dbPartsCatalog = (results[7] && !results[7].error) ? results[7].data : [];
-    const dbPartsTags = (results[8] && !results[8].error) ? results[8].data : [];
-    const dbAccounts = (results[9] && !results[9].error) ? results[9].data : [];
+    const dbPins = res[0].data || [];
+    const dbDes = res[1].data || [];
+    const dbHs = res[2].data || [];
+    const dbTags = (!res[3].error && res[3].data) ? res[3].data : [];
+    const dbReps = (!res[4].error && res[4].data) ? res[4].data : [];
+    const dbFb = (!res[5].error && res[5].data) ? res[5].data : [];
+    const dbOrders = (!res[6].error && res[6].data) ? res[6].data : [];
+    const dbCatalog = (!res[7].error && res[7].data) ? res[7].data : [];
+    const dbPartTags = (!res[8].error && res[8].data) ? res[8].data : [];
+    const dbAccs = (!res[9].error && res[9].data) ? res[9].data : [];
 
-    playersDB = (dbPlayers || []).map(pl => ({
-        id: pl.id,
-        ownerUserId: pl.owner_user_id || null,
-        displayName: pl.display_name || '',
-        shortInitials: (pl.short_tag || pl.short_initials || '').toUpperCase(),
-        aliases: Array.isArray(pl.aliases) ? pl.aliases.map(a => String(a).toUpperCase()) : [],
-        flipperTags: (pl.flipper_tags && typeof pl.flipper_tags === 'object') ? pl.flipper_tags : {},
-        hasPin: pl.has_pin === true
+    playerTagsDB = dbTags.map((t) => ({
+        userId: t.user_id,
+        displayName: t.display_name || '',
+        shortTag: String(t.short_tag || '').trim().toUpperCase(),
+        flipperTags: (t.flipper_tags && typeof t.flipper_tags === 'object') ? t.flipper_tags : {}
     }));
 
-    highscoresDB = (dbHs || []).map(h => ({
+    highscoresDB = dbHs.map((h) => ({
         id: h.id,
         pinballId: h.flipper_id,
-        initials: (h.initials || '???').toUpperCase(),
+        initials: String(h.initials || '???').toUpperCase(),
         score: Number(h.score || 0),
         verifiziert: h.verifiziert === true,
         beweisfoto: h.beweisfoto || '',
         date: h.created_at
     }));
 
-    reportsDB = (dbReps || []).map(r => {
-        let prioNum = 0;
-        if (r.intensitaet !== null && r.intensitaet !== undefined && r.intensitaet !== '') {
-            const parsed = parseInt(r.intensitaet, 10);
-            if (parsed >= 1 && parsed <= 3) prioNum = parsed;
-        }
-        const parsedMergeCount = parseInt(r.merge_count, 10);
-
+    reportsDB = dbReps.map((r) => {
+        const p = parseInt(r.intensitaet, 10);
+        const mc = parseInt(r.merge_count, 10);
         return {
             id: r.id,
             pinballId: r.flipper_id,
             date: r.created_at,
             behobenAm: r.behoben_am || null,
-            prio: prioNum,
+            prio: (p >= 1 && p <= 3) ? p : 0,
             status: normalizeReportStatus(r.status),
             verifiziert: r.verifiziert === true,
             email: r.email || '',
@@ -814,11 +741,11 @@ async function loadAllDatabaseData() {
             ursache: r.ursache || '',
             loesungsweg: r.loesungsweg || '',
             loesung_foto_url: r.loesung_foto_url || '',
-            mergeCount: (!isNaN(parsedMergeCount) && parsedMergeCount >= 1) ? parsedMergeCount : 1
+            mergeCount: (!isNaN(mc) && mc >= 1) ? mc : 1
         };
     });
 
-    feedbackDB = (dbFb || []).map(f => ({
+    feedbackDB = dbFb.map((f) => ({
         id: f.id,
         date: f.created_at,
         text: f.nachricht || '',
@@ -826,7 +753,7 @@ async function loadAllDatabaseData() {
         foto: f.foto || ''
     }));
 
-    partsOrdersDB = (dbPartsOrders || []).map(o => ({
+    partsOrdersDB = dbOrders.map((o) => ({
         id: o.id,
         partId: o.part_id || null,
         pinballId: o.flipper_id || null,
@@ -844,7 +771,7 @@ async function loadAllDatabaseData() {
         deliveredAt: o.delivered_at || null
     }));
 
-    partsCatalogDB = (dbPartsCatalog || []).map(c => ({
+    partsCatalogDB = dbCatalog.map((c) => ({
         id: c.id,
         partName: c.part_name || '',
         tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
@@ -856,32 +783,19 @@ async function loadAllDatabaseData() {
         notes: c.notes || ''
     }));
 
-    partsTagsDB = (dbPartsTags || []).map(t => ({
-        id: t.id,
-        name: t.name || ''
-    }));
+    partsTagsDB = dbPartTags.map((t) => ({ id: t.id, name: t.name || '' }));
+    accountsDB = dbAccs;
 
-    accountsDB = dbAccounts || [];
-
-    pinballs = (dbPins || []).map(p => {
-        const designerNames = p.designer_id
-            ? p.designer_id.map(id => dbDes?.find(d => d.designer_id == id)?.designer).filter(Boolean).join(', ')
+    pinballs = dbPins.map((p) => {
+        const designers = p.designer_id
+            ? p.designer_id.map((id) => dbDes.find((d) => d.designer_id == id)?.designer).filter(Boolean).join(', ')
             : 'Unbekannt';
-
         const isAktiv = p.aktiv === true;
-        const rawImg = p.foto_url || p.foto || p.bild || '';
-
-        const verifiedForPin = highscoresDB
-            .filter(h => h.pinballId === p.id && h.verifiziert)
-            .sort((a, b) => b.score - a.score);
-
-        const topScoreStr = verifiedForPin.length > 0
-            ? `${formatScore(verifiedForPin[0].score)} (${getFormattedPlayerDisplay(verifiedForPin[0].initials)})`
-            : "Noch kein Rekord";
-
-        const parsedMaxLen = (p.hs_max_length !== null && p.hs_max_length !== undefined && p.hs_max_length !== '')
-            ? Number(p.hs_max_length)
-            : 3;
+        const verified = highscoresDB.filter((h) => h.pinballId === p.id && h.verifiziert).sort((a, b) => b.score - a.score);
+        const topScore = verified.length > 0
+            ? `${formatScore(verified[0].score)} (${getFormattedPlayerDisplay(verified[0].initials, p.id)})`
+            : 'Noch kein Rekord';
+        const maxLen = (p.hs_max_length !== null && p.hs_max_length !== undefined && p.hs_max_length !== '') ? Number(p.hs_max_length) : 3;
 
         return {
             id: p.id,
@@ -889,16 +803,15 @@ async function loadAllDatabaseData() {
             name: p.name,
             year: p['manufacture year'] || '-',
             maker: p.manufacturer || '-',
-            designer: designerNames,
+            designer: designers,
             prod: p.production || '-',
-            score: topScoreStr,
-            owner: "-",
-            status: isAktiv ? "Spielbereit" : "Wartung (Inaktiv)",
-            power: p.an ? "ON" : "OFF",
-            desc: p['georgs text'] || "",
-            isAktiv: isAktiv,
-            imgUrl: getFlipperImageUrl(rawImg),
-            hsMaxLength: !isNaN(parsedMaxLen) && parsedMaxLen >= 0 ? parsedMaxLen : 3,
+            score: topScore,
+            status: isAktiv ? 'Spielbereit' : 'Wartung (Inaktiv)',
+            power: p.an ? 'ON' : 'OFF',
+            desc: p['georgs text'] || '',
+            isAktiv,
+            imgUrl: getFlipperImageUrl(p.foto_url || p.foto || p.bild || ''),
+            hsMaxLength: (!isNaN(maxLen) && maxLen >= 0) ? maxLen : 3,
             hsAllowNumbers: p.hs_allow_numbers === true,
             hsAllowSpecial: p.hs_allow_special === true
         };
@@ -907,47 +820,31 @@ async function loadAllDatabaseData() {
     saveStateToCache();
 }
 
-// --- CLIENTSEITIGE BILDKOMPRIMIERUNG VOR DEM UPLOAD ---
+// --- BILDKOMPRIMIERUNG, POWER, FOTOS & SCORE-BEREINIGUNG ---
 
-async function compressImageFile(file, maxDimension = 1600, quality = 0.78) {
+async function compressImageFile(file, maxDim = 1600, quality = 0.78) {
     if (!file || !file.type || !file.type.startsWith('image/')) return file;
-
     return new Promise((resolve) => {
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = (ev) => {
             const img = new Image();
             img.onload = () => {
-                let width = img.width;
-                let height = img.height;
-
-                if (width > maxDimension || height > maxDimension) {
-                    if (width >= height) {
-                        height = Math.round((height * maxDimension) / width);
-                        width = maxDimension;
-                    } else {
-                        width = Math.round((width * maxDimension) / height);
-                        height = maxDimension;
-                    }
+                let { width: w, height: h } = img;
+                if (w > maxDim || h > maxDim) {
+                    if (w >= h) { h = Math.round((h * maxDim) / w); w = maxDim; }
+                    else { w = Math.round((w * maxDim) / h); h = maxDim; }
                 }
-
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                canvas.toBlob((blob) => {
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                c.getContext('2d').drawImage(img, 0, 0, w, h);
+                c.toBlob((blob) => {
                     if (!blob) { resolve(file); return; }
-                    const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
-                    const compressedFile = new File([blob], `${baseName}.jpg`, {
-                        type: 'image/jpeg',
-                        lastModified: Date.now()
-                    });
-                    resolve(compressedFile);
+                    const base = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+                    resolve(new File([blob], `${base}.jpg`, { type: 'image/jpeg', lastModified: Date.now() }));
                 }, 'image/jpeg', quality);
             };
             img.onerror = () => resolve(file);
-            img.src = event.target.result;
+            img.src = ev.target.result;
         };
         reader.onerror = () => resolve(file);
         reader.readAsDataURL(file);
@@ -956,12 +853,12 @@ async function compressImageFile(file, maxDimension = 1600, quality = 0.78) {
 
 async function uploadIncomingPhoto(folder, file) {
     if (!file) return '';
-    const compressed = await compressImageFile(file, 1600, 0.78);
+    const compressed = await compressImageFile(file);
     const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const filePath = `${folder}/${Date.now()}_${safeName}`;
-    const { error } = await db.storage.from('fotos-incoming').upload(filePath, compressed);
+    const path = `${folder}/${Date.now()}_${safeName}`;
+    const { error } = await db.storage.from('fotos-incoming').upload(path, compressed);
     if (error) throw error;
-    return filePath;
+    return path;
 }
 
 function populatePinballInfoBox(pin, prefix) {
@@ -975,60 +872,47 @@ function populatePinballInfoBox(pin, prefix) {
 
     const imgBox = document.getElementById(`${prefix}-img-box`);
     if (imgBox) {
-        const desiredHtml = pin.imgUrl ? `<img src="${pin.imgUrl}" alt="${pin.name}">` : '';
-        if (imgBox.innerHTML !== desiredHtml) imgBox.innerHTML = desiredHtml;
+        const html = pin.imgUrl ? `<img src="${pin.imgUrl}" alt="${escHtml(pin.name)}">` : '';
+        if (imgBox.innerHTML !== html) imgBox.innerHTML = html;
     }
 }
 
-async function togglePinballPower(pinballId, btnElement, onDone = null) {
-    const targetPin = pinballs.find(p => p.id === pinballId);
-    if (!targetPin) return;
+async function togglePinballPower(pinballId, btnEl, onDone = null) {
+    const pin = pinballs.find((p) => p.id === pinballId);
+    if (!pin) return;
 
     const canPowerOff = hasPerm('power_off');
+    if (!canPowerOff && !pin.isAktiv) {
+        showActionToast('Sicherheitssperre: Inaktive Flipper können nicht eingeschaltet werden!', 'error');
+        return;
+    }
+    if (!canPowerOff && !ensureWritePermission()) return;
 
-    if (!canPowerOff && !targetPin.isAktiv) {
-        showActionToast("Sicherheitssperre: Inaktive Flipper können nicht eingeschaltet werden!", "error");
+    const isOn = pin.power === 'ON';
+    if (isOn && !canPowerOff) {
+        showActionToast(`„${pin.name}“ ist bereits eingeschaltet!`, 'info');
         return;
     }
 
-    if (!canPowerOff && !ensureWritePermission()) {
-        return;
+    const next = !isOn;
+    if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.classList.add('btn-busy');
+        btnEl.innerText = next ? '⏳ Schalte ein...' : '⏳ Schalte aus...';
     }
 
-    const isCurrentlyOn = targetPin.power === 'ON';
-    if (isCurrentlyOn && !canPowerOff) {
-        showActionToast(`„${targetPin.name}“ ist bereits eingeschaltet!`, "info");
-        return;
-    }
-
-    const newState = !isCurrentlyOn;
-    if (btnElement) {
-        btnElement.disabled = true;
-        btnElement.classList.add('btn-busy');
-        btnElement.innerText = newState ? "⏳ Schalte ein..." : "⏳ Schalte aus...";
-    }
-
-    const { error } = await db.from('flipper').update({ an: newState }).eq('id', targetPin.id);
+    const { error } = await db.from('flipper').update({ an: next }).eq('id', pin.id);
     if (error) {
-        if (btnElement) {
-            btnElement.disabled = false;
-            btnElement.classList.remove('btn-busy');
-        }
-        showActionToast("Fehler beim Schalten: " + error.message, "error");
-        if (typeof onDone === 'function') onDone(targetPin);
+        if (btnEl) { btnEl.disabled = false; btnEl.classList.remove('btn-busy'); }
+        showActionToast('Fehler beim Schalten: ' + error.message, 'error');
+        if (typeof onDone === 'function') onDone(pin);
         return;
     }
 
-    targetPin.power = newState ? 'ON' : 'OFF';
+    pin.power = next ? 'ON' : 'OFF';
     saveStateToCache();
-
-    if (newState) {
-        showActionToast(`✓ Flipper „${targetPin.name}“ wurde erfolgreich eingeschaltet!`, "success");
-    } else {
-        showActionToast(`Flipper „${targetPin.name}“ wurde ausgeschaltet (OFF).`, "info");
-    }
-
-    if (typeof onDone === 'function') onDone(targetPin);
+    showActionToast(next ? `✓ „${pin.name}“ eingeschaltet (ON)!` : `„${pin.name}“ ausgeschaltet (OFF).`, next ? 'success' : 'info');
+    if (typeof onDone === 'function') onDone(pin);
 }
 
 async function togglePrivatePhoto(boxId, btnId, filePath, showText, hideText, labelText = '') {
@@ -1049,35 +933,24 @@ async function togglePrivatePhoto(boxId, btnId, filePath, showText, hideText, la
 
     box.innerHTML = '<i>Lade geschütztes Foto...</i>';
     const { data, error } = await db.storage.from('fotos-incoming').createSignedUrl(filePath, 300);
-
     if (error || !data?.signedUrl) {
-        box.innerHTML = `<span style="color:var(--status-red);">Fehler beim Laden: ${error ? error.message : 'Unbekannt'}</span>`;
+        box.innerHTML = `<span style="color:var(--red);">Fehler beim Laden: ${escHtml(error ? error.message : 'Unbekannt')}</span>`;
         return;
     }
 
     box.dataset.loaded = 'true';
-    const labelHtml = labelText ? `<div style="font-size:12px; font-weight:bold; color:var(--text-muted); margin-bottom:4px;">${labelText}:</div>` : '';
-    box.innerHTML = `
-        ${labelHtml}
-        <a href="${data.signedUrl}" target="_blank" title="In voller Größe öffnen">
-            <img src="${data.signedUrl}" style="max-width: 100%; max-height: 350px; border-radius: 6px; border: 1px solid var(--border-light); margin-top: 4px;">
-        </a>
-    `;
+    const label = labelText ? `<div style="font-size:12px; font-weight:bold; color:var(--muted); margin-bottom:4px;">${escHtml(labelText)}:</div>` : '';
+    box.innerHTML = `${label}<a href="${data.signedUrl}" target="_blank" title="In voller Größe öffnen"><img src="${data.signedUrl}" style="max-width:100%; max-height:350px; border-radius:6px; border:1px solid var(--border-l); margin-top:4px;"></a>`;
 }
 
 async function removeOldLowerPlayerScores(pinballId, playerInitials, keepScoreId, newScoreValue) {
     if (hasPerm('verify_highscores')) {
-        const oldEntries = highscoresDB.filter(
-            h => h.pinballId === pinballId &&
-                 h.id !== keepScoreId &&
-                 isSamePlayerIdentity(h.initials, playerInitials) &&
-                 h.score <= newScoreValue
+        const old = highscoresDB.filter(
+            (h) => h.pinballId === pinballId && h.id !== keepScoreId && isSamePlayerIdentity(h.initials, playerInitials, pinballId) && h.score <= newScoreValue
         );
-        for (const oldEntry of oldEntries) {
-            if (oldEntry.beweisfoto) {
-                await db.storage.from('fotos-incoming').remove([oldEntry.beweisfoto]);
-            }
-            await db.from('highscore').delete().eq('id', oldEntry.id);
+        for (const item of old) {
+            if (item.beweisfoto) await db.storage.from('fotos-incoming').remove([item.beweisfoto]);
+            await db.from('highscore').delete().eq('id', item.id);
         }
     } else if (hasPerm('auto_verify_highscores') && keepScoreId) {
         await db.rpc('cleanup_lower_scores_for_entry', { p_keep_id: keepScoreId });
@@ -1086,6 +959,6 @@ async function removeOldLowerPlayerScores(pinballId, playerInitials, keepScoreId
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(() => {});
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
     });
 }

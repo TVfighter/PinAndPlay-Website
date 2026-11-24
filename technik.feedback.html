@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&amp;Play - Technik Feedback</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="navigateBackTo('/')" title="Zurück zur Übersicht">←</button>
+                <h2 style="margin: 0;">Technik-Center: Spieler-Feedback</h2>
+            </div>
+            <div class="detail-header-actions">
+                <select id="sort-fb" class="bold-sort-select" style="min-width: 190px;" onchange="renderFeedback()">
+                    <option value="desc">Neueste zuerst</option>
+                    <option value="asc">Älteste zuerst</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="tech-subnav" class="report-mode-tabs"></div>
+        <div id="fb-list"><p style="padding: 15px;">Lade Feedback...</p></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/app.js"></script>
+    <script>
+        function renderFeedback() {
+            renderTechSubnav('tech-subnav', 'feedback');
+            const box = document.getElementById('fb-list');
+            if (!feedbackDB.length) {
+                box.innerHTML = '<p style="color:var(--muted); padding:10px;"><i>Aktuell liegt kein Spieler-Feedback vor.</i></p>';
+                return;
+            }
+            const asc = document.getElementById('sort-fb').value === 'asc';
+            const sorted = [...feedbackDB].sort((a, b) => asc ? (new Date(a.date) - new Date(b.date)) : (new Date(b.date) - new Date(a.date)));
+
+            box.innerHTML = sorted.map((f) => {
+                const sf = escJsArg(f.foto || '');
+                const photoBtn = f.foto
+                    ? `<button id="bfb-${f.id}" class="btn-switch" onclick="togglePrivatePhoto('xfb-${f.id}','bfb-${f.id}','${sf}','Foto ansehen','Ausblenden','Angehängtes Foto')">Foto ansehen</button>`
+                    : '<span></span>';
+                return `
+                    <div class="report-comment" style="border-left:4px solid var(--gold);">
+                        <div class="report-header-bar">
+                            <strong style="color:var(--gold-l);">Feedback #${f.id}</strong>
+                            <span style="color:var(--muted); font-size:12px;">${formatDateTime(f.date)}</span>
+                        </div>
+                        <div class="report-body-text">${escHtml(f.text)}</div>
+                        <div class="report-meta-email">${f.email ? `Kontakt: <strong style="color:var(--gold-l);">${escHtml(f.email)}</strong>` : '<i>Anonym eingereicht</i>'}</div>
+                        <div id="xfb-${f.id}" style="margin:8px 0; display:none;"></div>
+                        <div class="report-actions">
+                            <div>${photoBtn}</div>
+                            <button class="btn-report" onclick="deleteFeedback(${f.id}, '${sf}')">Löschen</button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        async function deleteFeedback(id, foto) {
+            if (!confirm('Feedback-Eintrag wirklich löschen?')) return;
+            if (foto) await db.storage.from('fotos-incoming').remove([foto]);
+            const { error } = await db.from('feedback').delete().eq('id', id);
+            if (error) { showActionToast('Fehler: ' + error.message, 'error'); return; }
+            showActionToast('Feedback gelöscht.', 'info');
+            await loadAllDatabaseData();
+            renderSharedHeader();
+            renderFeedback();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => {
+                if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+                if (!hasPerm('view_feedback')) { window.location.href = '/'; return; }
+                renderFeedback();
+            });
+            if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+            if (!hasPerm('view_feedback')) { showActionToast('Keine Berechtigung.', 'error'); window.location.href = '/'; return; }
+            renderFeedback();
+        });
+    </script>
+</body>
+</html>

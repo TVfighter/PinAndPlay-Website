@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&amp;Play - Account-Verwaltung</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="navigateBackTo('/')" title="Zurück">←</button>
+                <h2 style="margin: 0;">Accounts &amp; Berechtigungen (<span id="acc-count">0</span>)</h2>
+            </div>
+            <div class="detail-header-actions">
+                <button class="btn-green" onclick="openAccountModal(null)">+ Neuen Account erstellen</button>
+            </div>
+        </div>
+
+        <p style="font-size: 14px; color: var(--muted); margin-top: 0; margin-bottom: 18px; line-height: 1.5;">
+            Jeder Account kann unter <strong>Initialen</strong> (oben im Account-Menü) seine eigenen geschützten Highscore-Initialen hinterlegen. Der Ur-Account <strong>technik@pinandplay.de</strong> besitzt unveränderbare Vollrechte.
+        </p>
+
+        <div id="accounts-list"></div>
+    </div>
+
+    <!-- MODAL: ACCOUNT ANLEGEN / BEARBEITEN -->
+    <div id="modal-account" class="modal-overlay hidden">
+        <div class="modal-box" style="max-width: 680px;">
+            <div class="detail-header" style="margin-bottom: 14px; padding-bottom: 10px;">
+                <h3 id="acc-modal-title" style="margin: 0;">Neuen Account erstellen</h3>
+                <button class="btn-switch" onclick="closeAccountModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:190px;">
+                        <label><strong>Anzeigename *</strong></label>
+                        <input type="text" id="acc-name" placeholder="z. B. Georg / Max">
+                    </div>
+                    <div style="flex:1; min-width:170px;">
+                        <label><strong>Rollen-Bezeichnung</strong></label>
+                        <input type="text" id="acc-role" placeholder="z. B. Mitglied, Aufsicht, Techniker">
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:210px;">
+                        <label><strong>Login-E-Mail *</strong></label>
+                        <input type="email" id="acc-email" placeholder="name@pinplay.lokal">
+                    </div>
+                    <div style="flex:1; min-width:190px;">
+                        <label><strong id="acc-pwd-label">Passwort (mind. 6 Zeichen) *</strong></label>
+                        <input type="password" id="acc-pwd" placeholder="Passwort...">
+                    </div>
+                </div>
+
+                <!-- HINWEIS BEI UR-ACCOUNT -->
+                <div id="root-lock-banner" class="prev-score-banner hidden" style="border-left-color: var(--red); background: rgba(207, 52, 50, 0.14); color: #ff7b72;">
+                    🔒 <strong>Ur-Account-Schutz aktiv:</strong> Die Berechtigungen von <strong>technik@pinandplay.de</strong> sind fest gesperrt und können nicht verändert werden. Du kannst hier nur Anzeigename, Rolle oder Passwort anpassen.
+                </div>
+
+                <!-- SCHNELL-VORLAGEN -->
+                <div id="presets-wrap" style="margin-bottom: 12px;">
+                    <div style="font-size: 12px; font-weight: bold; color: var(--gold-l); margin-bottom: 6px;">Schnell-Vorlagen:</div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button type="button" class="btn-switch" style="padding:5px 10px; font-size:12px;" onclick="applyPreset('member')">Stammspieler</button>
+                        <button type="button" class="btn-switch" style="padding:5px 10px; font-size:12px;" onclick="applyPreset('georg')">Leser / Aufsicht</button>
+                        <button type="button" class="btn-switch" style="padding:5px 10px; font-size:12px;" onclick="applyPreset('tech')">Techniker</button>
+                        <button type="button" class="btn-yellow" style="padding:5px 10px; font-size:12px;" onclick="applyPreset('admin')">Admin</button>
+                    </div>
+                </div>
+
+                <!-- ADMIN-SCHALTER -->
+                <label class="perm-checkbox-compact" style="margin-bottom: 12px; border-color: var(--gold); background: rgba(212,175,55,0.1);">
+                    <input type="checkbox" id="p-admin" onchange="onAdminToggle()">
+                    <div>
+                        <strong style="color:var(--gold-l);">🔑 Admin (Vollzugriff &amp; Accounts verwalten)</strong>
+                        <small>Automatisch alle Rechte inklusive Account-Verwaltung</small>
+                    </div>
+                </label>
+
+                <!-- SLIDER 1: DEFEKTE (ENTKOPPELT VON AUTO-VERIFY!) -->
+                <div class="perm-slider-card">
+                    <div class="perm-slider-header">
+                        <strong>🛠️ Defekt-Verwaltung</strong>
+                        <span id="badge-rep" class="perm-slider-badge">Kein Zugriff</span>
+                    </div>
+                    <input type="range" id="sl-rep" class="perm-range-input" min="0" max="2" step="1" value="0" oninput="updateSliders()">
+                    <div class="perm-slider-steps steps-3">
+                        <div id="rs-0" class="perm-slider-step" onclick="setSlider('sl-rep', 0)">0: Kein Zugriff</div>
+                        <div id="rs-1" class="perm-slider-step" onclick="setSlider('sl-rep', 1)">1: Einsehen<br>(Nur lesend)</div>
+                        <div id="rs-2" class="perm-slider-step" onclick="setSlider('sl-rep', 2)">2: Editieren<br>(Vollzugriff)</div>
+                    </div>
+                </div>
+
+                <!-- SLIDER 2: ERSATZTEILE & INVENTAR -->
+                <div class="perm-slider-card">
+                    <div class="perm-slider-header">
+                        <strong>🔧 Ersatzteile &amp; Inventar</strong>
+                        <span id="badge-parts" class="perm-slider-badge">Kein Zugriff</span>
+                    </div>
+                    <input type="range" id="sl-parts" class="perm-range-input" min="0" max="2" step="1" value="0" oninput="updateSliders()">
+                    <div class="perm-slider-steps steps-3">
+                        <div id="ps-0" class="perm-slider-step" onclick="setSlider('sl-parts', 0)">0: Kein Zugriff</div>
+                        <div id="ps-1" class="perm-slider-step" onclick="setSlider('sl-parts', 1)">1: Anfordern<br>(inkl. QR-Scan)</div>
+                        <div id="ps-2" class="perm-slider-step" onclick="setSlider('sl-parts', 2)">2: Inventar &amp; Shop<br>(Bestand &amp; Bestellen)</div>
+                    </div>
+                </div>
+
+                <!-- KOMPAKTE EINZELRECHTE (INKL. SEPARATEM AUTO-VERIFY) -->
+                <div style="font-size: 12px; font-weight: bold; color: var(--gold-l); margin: 10px 0 6px 0;">Weitere Berechtigungen:</div>
+                <div class="perm-grid-compact">
+                    <label class="perm-checkbox-compact">
+                        <input type="checkbox" id="p-no-qr">
+                        <div><strong>🎫 Kein QR-Code nötig</strong><small>Freier Schreibzugriff</small></div>
+                    </label>
+                    <label class="perm-checkbox-compact">
+                        <input type="checkbox" id="p-power">
+                        <div><strong>⚡ Flipper AN/AUS &amp; Aktiv</strong><small>Power &amp; Wartungsstatus</small></div>
+                    </label>
+                    <label class="perm-checkbox-compact">
+                        <input type="checkbox" id="p-auto-rep">
+                        <div><strong>✓ Defekte auto-verifiziert</strong><small>Eigene Meldungen direkt OK</small></div>
+                    </label>
+                    <label class="perm-checkbox-compact">
+                        <input type="checkbox" id="p-auto-hs">
+                        <div><strong>✓ Highscores auto-verifiziert</strong><small>Eigene Scores ohne Foto live</small></div>
+                    </label>
+                    <label class="perm-checkbox-compact">
+                        <input type="checkbox" id="p-verify-hs">
+                        <div><strong>🏆 Highscores prüfen</strong><small>Alle prüfen &amp; löschen</small></div>
+                    </label>
+                    <label class="perm-checkbox-compact">
+                        <input type="checkbox" id="p-qr">
+                        <div><strong>📺 Tages-QR &amp; TV-Seite</strong><small>Check-In QR &amp; 100"-Display</small></div>
+                    </label>
+                    <label class="perm-checkbox-compact">
+                        <input type="checkbox" id="p-fb">
+                        <div><strong>💬 Feedback verwalten</strong><small>Lesen &amp; löschen</small></div>
+                    </label>
+                </div>
+
+                <button id="acc-save-btn" class="btn-green" style="width:100%; padding:13px;" onclick="saveAccountModal()">Account speichern</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/app.js"></script>
+    <script>
+        let editingUid = null;
+        let editingIsRoot = false;
+
+        const REP_LBL = ['Kein Zugriff', 'Einsehen (lesend)', 'Editieren (Vollzugriff)'];
+        const PARTS_LBL = ['Kein Zugriff', 'Teile anfordern', 'Inventar & Bestellen'];
+        const ALL_PERM_IDS = ['p-admin', 'sl-rep', 'sl-parts', 'p-no-qr', 'p-power', 'p-auto-rep', 'p-auto-hs', 'p-verify-hs', 'p-qr', 'p-fb'];
+
+        function setSlider(id, val) {
+            const el = document.getElementById(id);
+            if (!el || el.disabled) return;
+            el.value = String(val);
+            updateSliders();
+        }
+
+        function updateSliders() {
+            const r = parseInt(document.getElementById('sl-rep').value, 10);
+            const p = parseInt(document.getElementById('sl-parts').value, 10);
+            document.getElementById('badge-rep').innerText = REP_LBL[r];
+            document.getElementById('badge-parts').innerText = PARTS_LBL[p];
+            for (let i = 0; i <= 2; i++) {
+                document.getElementById(`rs-${i}`).classList.toggle('step-active', i === r);
+                document.getElementById(`ps-${i}`).classList.toggle('step-active', i === p);
+            }
+        }
+
+        function onAdminToggle() {
+            const isAdm = editingIsRoot || document.getElementById('p-admin').checked;
+            if (isAdm) {
+                document.getElementById('p-admin').checked = true;
+                document.getElementById('sl-rep').value = '2';
+                document.getElementById('sl-parts').value = '2';
+                ['p-no-qr', 'p-power', 'p-auto-rep', 'p-auto-hs', 'p-verify-hs', 'p-qr', 'p-fb'].forEach((id) => {
+                    document.getElementById(id).checked = true;
+                });
+            }
+            ALL_PERM_IDS.forEach((id) => {
+                if (id === 'p-admin') document.getElementById(id).disabled = editingIsRoot;
+                else document.getElementById(id).disabled = isAdm;
+            });
+            updateSliders();
+        }
+
+        function buildPills(acc) {
+            if (isRootAccount(acc)) {
+                return '<span class="perm-tag-pill" style="border-color:var(--red); color:#ff7b72;">🔒 Ur-Account (Vollzugriff gesperrt)</span>';
+            }
+            if (acc.perm_manage_accounts) {
+                return '<span class="perm-tag-pill" style="border-color:var(--gold); color:var(--gold-l);">🔑 Admin (Vollzugriff)</span>';
+            }
+            const t = [];
+            if (acc.perm_no_qr) t.push('🎫 Kein QR');
+            if (acc.perm_power_off) t.push('⚡ Power & Aktiv');
+            if (acc.perm_manage_reports) t.push('🛠️ Defekte: Editieren');
+            else if (acc.perm_view_reports) t.push('👁️ Defekte: Einsehen');
+            if (acc.perm_auto_verify_reports) t.push('✓ Defekte Auto-OK');
+            if (acc.perm_auto_verify_highscores) t.push('✓ Highscore Auto-OK');
+            if (acc.perm_verify_highscores) t.push('🏆 Highscores prüfen');
+            if (acc.perm_manage_parts) t.push('🔧 Inventar & Shop');
+            else if (acc.perm_request_parts) t.push('🛒 Teile anfordern');
+            if (acc.perm_manage_players_qr) t.push('📺 QR & TV');
+            if (acc.perm_view_feedback) t.push('💬 Feedback');
+            return t.length ? t.map((x) => `<span class="perm-tag-pill">${x}</span>`).join('') : '<span class="perm-tag-pill" style="color:var(--muted);">Standard-Account</span>';
+        }
+
+        function renderAccounts() {
+            document.getElementById('acc-count').innerText = accountsDB.length;
+            const box = document.getElementById('accounts-list');
+            if (!accountsDB.length) { box.innerHTML = '<p style="color:var(--muted);"><i>Keine Accounts gefunden.</i></p>'; return; }
+
+            box.innerHTML = accountsDB.map((acc) => {
+                const isRoot = isRootAccount(acc);
+                const isSelf = currentUserAccount && acc.user_id === currentUserAccount.user_id;
+                const tagBadge = acc.short_tag ? `<span class="perm-tag-pill" style="color:var(--gold-l);">Kürzel: ${escHtml(acc.short_tag)}</span>` : '';
+                return `
+                    <div class="report-comment" style="border-left:5px solid ${isRoot ? 'var(--red)' : (acc.perm_manage_accounts ? 'var(--gold)' : 'var(--blue)')};">
+                        <div class="report-header-bar">
+                            <div>
+                                <strong style="font-size:17px; color:var(--gold-l);">${escHtml(acc.display_name)}</strong>
+                                <span class="badge-verified" style="margin-left:8px;">${escHtml(acc.role_label)}</span>
+                                ${isRoot ? '<span class="badge-unverified" style="margin-left:6px;">Ur-Account</span>' : ''}
+                                ${isSelf ? '<span class="badge-merged" style="margin-left:6px;">Du</span>' : ''}
+                                ${tagBadge}
+                                <div style="font-size:13px; color:var(--muted); margin-top:4px;">Login: ${escHtml(acc.email)}</div>
+                            </div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                <button class="btn-switch" onclick="openAccountModal('${acc.user_id}')">${isRoot ? 'Name / Passwort' : 'Rechte / Passwort'}</button>
+                                ${(!isSelf && !isRoot) ? `<button class="btn-report" onclick="deleteAccount('${acc.user_id}', '${escJsArg(acc.display_name)}')">Löschen</button>` : ''}
+                            </div>
+                        </div>
+                        <div>${buildPills(acc)}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        function applyPermsToModal(p) {
+            const isAdm = editingIsRoot || !!p.perm_manage_accounts;
+            document.getElementById('p-admin').checked = isAdm;
+            document.getElementById('sl-rep').value = String(isAdm || p.perm_manage_reports ? 2 : (p.perm_view_reports ? 1 : 0));
+            document.getElementById('sl-parts').value = String(isAdm || p.perm_manage_parts ? 2 : (p.perm_request_parts ? 1 : 0));
+            document.getElementById('p-no-qr').checked = isAdm || !!p.perm_no_qr;
+            document.getElementById('p-power').checked = isAdm || !!p.perm_power_off;
+            document.getElementById('p-auto-rep').checked = isAdm || !!p.perm_auto_verify_reports;
+            document.getElementById('p-auto-hs').checked = isAdm || !!p.perm_auto_verify_highscores;
+            document.getElementById('p-verify-hs').checked = isAdm || !!p.perm_verify_highscores;
+            document.getElementById('p-qr').checked = isAdm || !!p.perm_manage_players_qr;
+            document.getElementById('p-fb').checked = isAdm || !!p.perm_view_feedback;
+            onAdminToggle();
+        }
+
+        function applyPreset(kind) {
+            if (editingIsRoot) return;
+            if (kind === 'member') {
+                document.getElementById('acc-role').value = 'Stammspieler';
+                applyPermsToModal({ perm_no_qr: true });
+            } else if (kind === 'georg') {
+                document.getElementById('acc-role').value = 'Aufsicht / Leser';
+                applyPermsToModal({ perm_no_qr: true, perm_power_off: true, perm_view_reports: true, perm_auto_verify_reports: false, perm_request_parts: true });
+            } else if (kind === 'tech') {
+                document.getElementById('acc-role').value = 'Techniker';
+                applyPermsToModal({ perm_no_qr: true, perm_power_off: true, perm_view_reports: true, perm_manage_reports: true, perm_auto_verify_reports: true, perm_auto_verify_highscores: true, perm_verify_highscores: true, perm_request_parts: true, perm_manage_parts: true, perm_manage_players_qr: true, perm_view_feedback: true });
+            } else if (kind === 'admin') {
+                document.getElementById('acc-role').value = 'Admin';
+                applyPermsToModal({ perm_manage_accounts: true });
+            }
+        }
+
+        function openAccountModal(uid = null) {
+            editingUid = uid;
+            const acc = uid ? accountsDB.find((a) => a.user_id === uid) : null;
+            editingIsRoot = !!(acc && isRootAccount(acc));
+
+            document.getElementById('root-lock-banner').classList.toggle('hidden', !editingIsRoot);
+            document.getElementById('presets-wrap').classList.toggle('hidden', editingIsRoot);
+            document.getElementById('acc-pwd').value = '';
+
+            if (!acc) {
+                document.getElementById('acc-modal-title').innerText = 'Neuen Account erstellen';
+                document.getElementById('acc-name').value = '';
+                document.getElementById('acc-role').value = 'Stammspieler';
+                document.getElementById('acc-email').value = '';
+                document.getElementById('acc-email').disabled = false;
+                document.getElementById('acc-pwd-label').innerText = 'Passwort (mind. 6 Zeichen) *';
+                applyPermsToModal({ perm_no_qr: true });
+            } else {
+                document.getElementById('acc-modal-title').innerText = `Account bearbeiten: ${acc.display_name}`;
+                document.getElementById('acc-name').value = acc.display_name;
+                document.getElementById('acc-role').value = acc.role_label;
+                document.getElementById('acc-email').value = acc.email;
+                document.getElementById('acc-email').disabled = true;
+                document.getElementById('acc-pwd-label').innerText = 'Neues Passwort (Leer = unverändert)';
+                applyPermsToModal(acc);
+            }
+            document.getElementById('modal-account').classList.remove('hidden');
+        }
+        function closeAccountModal() { document.getElementById('modal-account').classList.add('hidden'); editingUid = null; editingIsRoot = false; }
+
+        function collectPerms() {
+            const isAdm = editingIsRoot || document.getElementById('p-admin').checked;
+            const r = parseInt(document.getElementById('sl-rep').value, 10);
+            const p = parseInt(document.getElementById('sl-parts').value, 10);
+            return {
+                perm_no_qr: isAdm || document.getElementById('p-no-qr').checked,
+                perm_power_off: isAdm || document.getElementById('p-power').checked,
+                perm_auto_verify_reports: isAdm || document.getElementById('p-auto-rep').checked,
+                perm_view_reports: isAdm || r >= 1,
+                perm_manage_reports: isAdm || r >= 2,
+                perm_auto_verify_highscores: isAdm || document.getElementById('p-auto-hs').checked,
+                perm_verify_highscores: isAdm || document.getElementById('p-verify-hs').checked,
+                perm_request_parts: isAdm || p >= 1,
+                perm_manage_parts: isAdm || p >= 2,
+                perm_manage_players_qr: isAdm || document.getElementById('p-qr').checked,
+                perm_view_feedback: isAdm || document.getElementById('p-fb').checked,
+                perm_manage_accounts: isAdm
+            };
+        }
+
+        async function saveAccountModal() {
+            const name = document.getElementById('acc-name').value.trim();
+            const role = document.getElementById('acc-role').value.trim() || 'Mitglied';
+            const email = document.getElementById('acc-email').value.trim().toLowerCase();
+            const pwd = document.getElementById('acc-pwd').value;
+            const perms = collectPerms();
+
+            if (!name) { showActionToast('Bitte Anzeigenamen eingeben!', 'error'); return; }
+            const btn = document.getElementById('acc-save-btn');
+            btn.disabled = true; btn.classList.add('btn-busy');
+
+            try {
+                if (!editingUid) {
+                    if (!email || !email.includes('@')) throw new Error('Bitte gültige E-Mail-Kennung eingeben.');
+                    if (!pwd || pwd.length < 6) throw new Error('Passwort muss mindestens 6 Zeichen lang sein.');
+
+                    const signupClient = window.supabase.createClient(supabaseUrl, supabaseKey, {
+                        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+                    });
+                    const { data: su, error: suErr } = await signupClient.auth.signUp({ email, password: pwd });
+                    if (suErr) throw suErr;
+                    if (!su?.user?.id || (Array.isArray(su.user.identities) && su.user.identities.length === 0)) {
+                        throw new Error('Ein Account mit dieser E-Mail existiert bereits.');
+                    }
+                    const { error: rpcErr } = await db.rpc('admin_setup_user_account', {
+                        p_user_id: su.user.id, p_email: email, p_display_name: name, p_role_label: role, p_perms: perms
+                    });
+                    if (rpcErr) throw rpcErr;
+                    showActionToast(`✓ Account „${name}“ erstellt!`, 'success');
+                } else {
+                    if (pwd && pwd.length < 6) throw new Error('Neues Passwort muss mindestens 6 Zeichen lang sein.');
+                    const { error: updErr } = await db.rpc('admin_update_user_account', {
+                        p_user_id: editingUid, p_display_name: name, p_role_label: role, p_perms: perms, p_new_password: pwd || ''
+                    });
+                    if (updErr) throw updErr;
+                    showActionToast(`✓ Account „${name}“ aktualisiert!`, 'success');
+                }
+                closeAccountModal();
+                await loadAllDatabaseData(); renderSharedHeader(); renderAccounts();
+            } catch (err) {
+                showActionToast('Fehler: ' + err.message, 'error', 4800);
+            } finally {
+                btn.disabled = false; btn.classList.remove('btn-busy');
+            }
+        }
+
+        async function deleteAccount(uid, name) {
+            if (!confirm(`Account „${name}“ wirklich dauerhaft löschen?`)) return;
+            const { error } = await db.rpc('admin_delete_user_account', { p_user_id: uid });
+            if (error) { showActionToast('Fehler: ' + error.message, 'error'); return; }
+            showActionToast(`Account „${name}“ gelöscht.`, 'info');
+            await loadAllDatabaseData(); renderAccounts();
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => {
+                if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+                if (!hasPerm('manage_accounts')) { window.location.href = '/'; return; }
+                renderAccounts();
+            });
+            if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+            if (!hasPerm('manage_accounts')) { showActionToast('Keine Berechtigung.', 'error'); window.location.href = '/'; return; }
+            renderAccounts();
+        });
+    </script>
+</body>
+</html>

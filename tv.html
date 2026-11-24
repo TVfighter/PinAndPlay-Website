@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&amp;Play - All-Time Highscores TV</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body class="tv-display-mode">
+    <div class="tv-topbar">
+        <div style="display:flex; align-items:center; gap: 1.5vw;">
+            <img src="/logo.png" alt="Pin & Play" style="height: clamp(42px, 5.5vh, 72px); width:auto;">
+            <div>
+                <div style="font-size: clamp(18px, 2.2vw, 36px); font-weight: 900; color: var(--gold-l); letter-spacing: 1px; text-transform: uppercase;">
+                    Hall of Fame — All-Time Highscores
+                </div>
+                <div id="tv-subtitle" style="font-size: clamp(12px, 1.1vw, 20px); color: var(--muted);">
+                    Lade Rekorde...
+                </div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap: 10px;">
+            <span id="tv-slide-counter" style="font-size: clamp(15px, 1.4vw, 24px); font-weight: 800; color: var(--gold); margin-right: 8px;"></span>
+            <button class="btn-switch" onclick="prevTvSlide()" title="Zurück (←)">◀</button>
+            <button id="tv-pause-btn" class="btn-switch" onclick="toggleTvPause()" title="Pause (Leertaste)">⏸</button>
+            <button class="btn-switch" onclick="nextTvSlide()" title="Weiter (→)">▶</button>
+            <button class="btn-yellow" onclick="toggleTvFullscreen()" title="Vollbild (F)">⛶ Vollbild</button>
+            <button class="btn-nav-util" onclick="window.location.href='/highscores'" title="Beenden">✕</button>
+        </div>
+    </div>
+
+    <div id="tv-stage" class="tv-stage">
+        <div style="grid-column: 1 / -1; text-align:center; font-size: 28px; color: var(--gold-l);">Lade Hall of Fame...</div>
+    </div>
+
+    <div class="tv-progress-track">
+        <div id="tv-progress-fill" class="tv-progress-fill"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/app.js"></script>
+    <script>
+        const pathSec = parseInt(getPathSegments()[1] || '12', 10);
+        const SLIDE_SECONDS = (!isNaN(pathSec) && pathSec >= 4) ? pathSec : 12;
+        const SLIDE_MS = SLIDE_SECONDS * 1000;
+
+        let tvSlides = [];
+        let idx = 0;
+        let isPaused = false;
+        let timer = null;
+
+        function buildSlides() {
+            const base = pinballs.some((p) => p.isAktiv) ? pinballs.filter((p) => p.isAktiv) : pinballs;
+            const list = base.map((pin) => ({
+                pin,
+                scores: highscoresDB.filter((h) => h.pinballId === pin.id && h.verifiziert).sort((a, b) => b.score - a.score)
+            }));
+            const nonEmpty = list.filter((x) => x.scores.length > 0);
+            tvSlides = nonEmpty.length > 0 ? nonEmpty : list;
+            if (idx >= tvSlides.length) idx = 0;
+        }
+
+        function renderSlide() {
+            const stage = document.getElementById('tv-stage');
+            if (tvSlides.length === 0) {
+                stage.innerHTML = '<div style="grid-column:1/-1; text-align:center; font-size:28px; color:var(--muted);">Keine Flipper-Daten vorhanden.</div>';
+                return;
+            }
+
+            const { pin, scores } = tvSlides[idx];
+            document.getElementById('tv-slide-counter').innerText = `${idx + 1} / ${tvSlides.length}`;
+            document.getElementById('tv-subtitle').innerText = `Live-Anzeige • Wechselt alle ${SLIDE_SECONDS}s • Stand: ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+
+            const imgHtml = pin.imgUrl
+                ? `<img src="${pin.imgUrl}" alt="${escHtml(pin.name)}">`
+                : `<div style="font-size:3vw; color:var(--gold); font-weight:bold;">${escHtml(pin.short)}</div>`;
+
+            let rightHtml = '';
+            if (scores.length === 0) {
+                rightHtml = `
+                    <div class="tv-champion-box" style="text-align:center;">
+                        <div style="font-size: clamp(20px, 2.2vw, 38px); color: var(--gold-l); font-weight: bold;">Noch kein verifizierter Rekord</div>
+                        <div style="font-size: clamp(14px, 1.4vw, 24px); color: var(--muted); margin-top: 10px;">Trage dich als Erster auf i.pinandplay.de ein!</div>
+                    </div>`;
+            } else {
+                const gc = scores[0];
+                const runnerUps = scores.slice(1, 5).map((s, i) => {
+                    const rank = i + 2;
+                    const badge = rank <= 3
+                        ? `<span class="rank-badge rank-${rank}" style="font-size:0.8em; height:auto; padding:4px 12px;">#${rank}</span>`
+                        : `<span style="color:var(--muted); font-weight:800; min-width:50px;">#${rank}</span>`;
+                    return `
+                        <div class="tv-score-row">
+                            <div style="display:flex; align-items:center; gap:1.2vw;">${badge}<strong>${escHtml(getFormattedPlayerDisplay(s.initials, pin.id))}</strong></div>
+                            <strong style="color:var(--gold-l); font-variant-numeric:tabular-nums;">${formatScore(s.score)}</strong>
+                        </div>`;
+                }).join('');
+
+                rightHtml = `
+                    <div class="tv-champion-box">
+                        <div style="font-size: clamp(14px, 1.3vw, 24px); color: var(--gold); font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.6vh;">👑 Grand Champion</div>
+                        <div style="font-size: clamp(32px, 4.4vw, 76px); font-weight: 900; color: var(--gold-l); line-height: 1.08; font-variant-numeric: tabular-nums;">${formatScore(gc.score)}</div>
+                        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top: 1.2vh; flex-wrap:wrap; gap:10px;">
+                            <span style="font-size: clamp(22px, 2.5vw, 44px); font-weight: 800; color: #fff;">${escHtml(getFormattedPlayerDisplay(gc.initials, pin.id))}</span>
+                            <span style="font-size: clamp(13px, 1.2vw, 22px); color: var(--muted);">am ${new Date(gc.date).toLocaleDateString('de-DE')}</span>
+                        </div>
+                    </div>
+                    <div>${runnerUps}</div>`;
+            }
+
+            stage.style.animation = 'none';
+            stage.offsetHeight;
+            stage.style.animation = '';
+            stage.innerHTML = `
+                <div>
+                    <div class="tv-machine-photo">${imgHtml}</div>
+                    <div style="margin-top: 1.6vh; display:flex; justify-content:space-between; gap:12px;">
+                        <span style="font-size: clamp(16px, 1.6vw, 28px); color: var(--gold-l); font-weight: 700;">${escHtml(pin.maker)} (${escHtml(pin.year)})</span>
+                        <span style="font-size: clamp(14px, 1.3vw, 22px); color: var(--muted);">Designer: ${escHtml(pin.designer)}</span>
+                    </div>
+                </div>
+                <div>
+                    <h1 style="margin: 0 0 2vh 0; font-size: clamp(30px, 3.8vw, 66px); color: #fff; line-height: 1.1; border-bottom: 2px solid var(--gold-b); padding-bottom: 1.2vh;">${escHtml(pin.name)}</h1>
+                    ${rightHtml}
+                </div>`;
+            restartProgress();
+        }
+
+        function restartProgress() {
+            const bar = document.getElementById('tv-progress-fill');
+            bar.style.transition = 'none';
+            bar.style.width = '0%';
+            if (isPaused) return;
+            bar.offsetHeight;
+            bar.style.transition = `width ${SLIDE_MS}ms linear`;
+            bar.style.width = '100%';
+        }
+
+        function scheduleNext() {
+            if (timer) clearTimeout(timer);
+            if (isPaused || tvSlides.length <= 1) return;
+            timer = setTimeout(() => { idx = (idx + 1) % tvSlides.length; renderSlide(); scheduleNext(); }, SLIDE_MS);
+        }
+
+        function nextTvSlide() { if (!tvSlides.length) return; idx = (idx + 1) % tvSlides.length; renderSlide(); scheduleNext(); }
+        function prevTvSlide() { if (!tvSlides.length) return; idx = (idx - 1 + tvSlides.length) % tvSlides.length; renderSlide(); scheduleNext(); }
+        function toggleTvPause() {
+            isPaused = !isPaused;
+            document.getElementById('tv-pause-btn').innerText = isPaused ? '▶' : '⏸';
+            if (isPaused && timer) clearTimeout(timer);
+            restartProgress();
+            if (!isPaused) scheduleNext();
+        }
+        function toggleTvFullscreen() {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+            else document.exitFullscreen?.().catch(() => {});
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') nextTvSlide();
+            else if (e.key === 'ArrowLeft') prevTvSlide();
+            else if (e.key === ' ') { e.preventDefault(); toggleTvPause(); }
+            else if (e.key === 'f' || e.key === 'F') toggleTvFullscreen();
+        });
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadAllDatabaseData();
+            buildSlides();
+            renderSlide();
+            scheduleNext();
+            navigator.wakeLock?.request('screen').catch(() => {});
+            setInterval(async () => { try { await loadAllDatabaseData(); buildSlides(); } catch (e) {} }, 60 * 1000);
+        });
+    </script>
+</body>
+</html>

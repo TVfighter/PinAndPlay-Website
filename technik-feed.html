@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&amp;Play - Technik Feed</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div class="container">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="navigateBackTo('/')" title="Zurück zur Übersicht">←</button>
+                <h2 id="feed-heading" style="margin: 0;">Technik-Center</h2>
+            </div>
+            <div class="detail-header-actions">
+                <button id="feed-add-btn" class="btn-green hidden" onclick="openFeedReportModal(null)">+ Neue Meldung</button>
+            </div>
+        </div>
+
+        <div id="tech-subnav" class="report-mode-tabs"></div>
+
+        <div id="feed-controls" class="report-controls">
+            <div class="filter-Toolbar">
+                <div style="flex: 1; min-width: 220px;">
+                    <div style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <label for="pin-filter" style="font-size: 13px; font-weight: bold; color: var(--muted);">Flipper:</label>
+                        <select id="pin-filter" class="bold-sort-select" style="min-width: 200px; margin: 0;" onchange="renderFeed()"></select>
+                    </div>
+                    <div id="pills-uv" class="filter-pills-group hidden">
+                        <button id="puv-reports" class="filter-pill pill-p2" onclick="toggleUv('reports')">Defekte</button>
+                        <button id="puv-hs" class="filter-pill pill-unverif" onclick="toggleUv('hs')">Highscores</button>
+                    </div>
+                    <div id="pills-rep" class="filter-pills-group hidden">
+                        <button id="pr-u" class="filter-pill pill-unverif" onclick="toggleRep('u')">Unverifiziert</button>
+                        <button id="pr-1" class="filter-pill pill-p1" onclick="toggleRep(1)">Prio 1</button>
+                        <button id="pr-2" class="filter-pill pill-p2" onclick="toggleRep(2)">Prio 2</button>
+                        <button id="pr-3" class="filter-pill pill-p3" onclick="toggleRep(3)">Prio 3</button>
+                    </div>
+                    <div id="pills-hs" class="filter-pills-group hidden">
+                        <button id="phs-unverif" class="filter-pill pill-unverif" onclick="toggleHs('unverif')">Unverifiziert</button>
+                        <button id="phs-verif" class="filter-pill pill-verif" onclick="toggleHs('verif')">Verifiziert</button>
+                    </div>
+                </div>
+                <div class="sort-and-action-group">
+                    <select id="feed-sort" class="bold-sort-select" onchange="renderFeed()"></select>
+                </div>
+            </div>
+        </div>
+
+        <div id="feed-list"></div>
+    </div>
+
+    <!-- MODAL 1: MELDUNG ANLEGEN / BEARBEITEN -->
+    <div id="m-rep" class="modal-overlay hidden">
+        <div class="modal-box">
+            <div class="detail-header" style="margin-bottom: 14px; padding-bottom: 10px;">
+                <h3 id="mr-head" style="margin: 0;">Meldung bearbeiten</h3>
+                <button class="btn-switch" onclick="closeFeedReportModal()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <label><strong>Flipper</strong></label>
+                <select id="mr-pin"></select>
+                <label><strong>Priorität</strong></label>
+                <select id="mr-prio">
+                    <option value="1">Prio 1 — Hoch (Unspielbar)</option>
+                    <option value="2">Prio 2 — Mittel (Spielspaß negativ)</option>
+                    <option value="3">Prio 3 — Niedrig (Kaum spürbar)</option>
+                </select>
+                <label><strong>Beschreibung *</strong></label>
+                <textarea id="mr-desc" rows="4"></textarea>
+                <label><strong>Ursache (Optional)</strong></label>
+                <textarea id="mr-cause" rows="3"></textarea>
+                <label><strong>Defekt-Foto (Optional)</strong></label><br>
+                <input type="file" id="mr-file" accept="image/*" style="margin-bottom: 14px; border: none; padding: 0;">
+                <button id="mr-save" class="btn-green" style="width: 100%; padding: 13px;" onclick="saveFeedReportModal()">Speichern &amp; Verifizieren</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: BEHOBEN -->
+    <div id="m-res" class="modal-overlay hidden">
+        <div class="modal-box">
+            <div class="detail-header" style="margin-bottom: 14px; padding-bottom: 10px;">
+                <h3 style="margin: 0;">Als behoben abschließen</h3>
+                <button class="btn-switch" onclick="closeResolve()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <label><strong>Lösungsweg (Optional)</strong></label>
+                <textarea id="res-txt" rows="4"></textarea>
+                <label><strong>Lösungs-Foto (Optional)</strong></label><br>
+                <input type="file" id="res-file" accept="image/*" style="margin-bottom: 14px; border: none; padding: 0;">
+                <button id="res-btn" class="btn-green" style="width: 100%; padding: 13px;" onclick="confirmResolve()">Jetzt abschließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: MERGE -->
+    <div id="m-merge" class="modal-overlay hidden">
+        <div class="modal-box">
+            <div class="detail-header" style="margin-bottom: 14px; padding-bottom: 10px;">
+                <h3 style="margin: 0;">Meldung anhängen</h3>
+                <button class="btn-switch" onclick="closeMerge()">Abbrechen</button>
+            </div>
+            <div class="report-form">
+                <div id="mg-prev" class="prev-score-banner"></div>
+                <label><strong>Ziel-Meldung (gleicher Flipper)</strong></label>
+                <select id="mg-tgt" onchange="updateMergeMath()"></select>
+                <div id="mg-math" style="margin-bottom: 14px; padding: 9px 12px; border-radius: 5px; background: rgba(56,139,253,0.14); border: 1px solid var(--blue); color: #79c0ff; font-weight: bold; font-size: 13px;"></div>
+                <button id="mg-btn" class="btn-green" style="width: 100%; padding: 13px;" onclick="confirmMerge()">Zusammenführen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: HIGHSCORE VERIFIZIEREN -->
+    <div id="m-vhs" class="modal-overlay hidden">
+        <div class="modal-box" style="max-width: 620px;">
+            <div class="detail-header" style="margin-bottom: 14px; padding-bottom: 10px;">
+                <h3 style="margin: 0;">Highscore &amp; Beweisfoto prüfen</h3>
+                <button class="btn-switch" onclick="closeVhs()">Abbrechen</button>
+            </div>
+            <div id="vhs-sum" class="prev-score-banner"></div>
+            <div id="vhs-img" style="background:#0f1115; border:1px solid var(--border-l); border-radius:6px; padding:14px; text-align:center; min-height:170px; display:flex; align-items:center; justify-content:center; margin-bottom:14px;"><i>Lade...</i></div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <button id="vhs-ok" class="btn-green" style="flex:2; padding:13px;" onclick="confirmVhs()">✓ Verifizieren &amp; Foto löschen</button>
+                <button class="btn-report" style="flex:1; padding:13px;" onclick="rejectVhs()">Ablehnen &amp; Löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/app.js"></script>
+    <script>
+        let feedMode = 'eingang';
+        let uvFilter = { reports: true, hs: true };
+        let repFilter = { u: true, 1: true, 2: true, 3: true };
+        let hsFilter = { unverif: true, verif: true };
+
+        let editId = null, resolveId = null, mergeId = null, vhsId = null;
+
+        const SORTS = {
+            eingang: [
+                { v: 'date-desc', l: 'Datum: Neueste zuerst' },
+                { v: 'date-asc', l: 'Datum: Älteste zuerst' },
+                { v: 'pin-asc', l: 'Flipper: A → Z' }
+            ],
+            defekte: [
+                { v: 'date-desc', l: 'Gemeldet: Neueste zuerst' },
+                { v: 'prio-desc', l: 'Prio: Hoch → Niedrig' },
+                { v: 'merge-desc', l: 'Anzahl Meldungen ↓' },
+                { v: 'pin-asc', l: 'Flipper: A → Z' }
+            ],
+            archiv: [
+                { v: 'res-desc', l: 'Behoben: Neueste zuerst' },
+                { v: 'res-asc', l: 'Behoben: Älteste zuerst' },
+                { v: 'pin-asc', l: 'Flipper: A → Z' }
+            ],
+            highscores: [
+                { v: 'hs-unv', l: 'Unverifiziert & Neueste' },
+                { v: 'hs-date', l: 'Datum: Neueste zuerst' },
+                { v: 'hs-score', l: 'Punkte: Höchste zuerst' },
+                { v: 'pin-asc', l: 'Flipper: A → Z' }
+            ]
+        };
+
+        const pinName = (id) => pinballs.find((p) => p.id === id)?.name || `Flipper #${id}`;
+
+        function openFlipper(pinId, tab) {
+            saveCurrentScrollPos();
+            setNavOrigin(window.location.pathname);
+            sessionStorage.setItem('pinplay_detail_tab', tab);
+            window.location.href = `/flipper/${pinId}/technik`;
+        }
+
+        function toggleUv(k) { uvFilter[k] = !uvFilter[k]; document.getElementById(`puv-${k}`).classList.toggle('inactive', !uvFilter[k]); renderFeed(); }
+        function toggleRep(k) { repFilter[k] = !repFilter[k]; document.getElementById(`pr-${k}`).classList.toggle('inactive', !repFilter[k]); renderFeed(); }
+        function toggleHs(k) { hsFilter[k] = !hsFilter[k]; document.getElementById(`phs-${k}`).classList.toggle('inactive', !hsFilter[k]); renderFeed(); }
+
+        function initFilters() {
+            const pf = document.getElementById('pin-filter');
+            const prev = pf.value || 'all';
+            pf.innerHTML = '<option value="all">Alle Flipper</option>' + [...pinballs].sort((a, b) => a.name.localeCompare(b.name, 'de')).map((p) => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+            pf.value = prev;
+
+            const sf = document.getElementById('feed-sort');
+            const opts = SORTS[feedMode] || SORTS.eingang;
+            sf.innerHTML = opts.map((o) => `<option value="${o.v}">${o.l}</option>`).join('');
+        }
+
+        function buildReportCard(r) {
+            const pCol = r.prio === 1 ? 'var(--red)' : (r.prio === 2 ? 'var(--orange)' : (r.prio === 3 ? 'var(--blue)' : 'var(--gold)'));
+            const pLbl = r.prio === 1 ? 'PRIO 1' : (r.prio === 2 ? 'PRIO 2' : (r.prio === 3 ? 'PRIO 3' : 'PRIO OFFEN'));
+            const canM = hasPerm('manage_reports');
+            const linkedParts = partsOrdersDB.filter((o) => o.reportId === r.id && o.status !== 'geliefert').length;
+            const peers = reportsDB.filter((x) => x.pinballId === r.pinballId && x.status === r.status && x.id !== r.id);
+            const f1 = escJsArg(r.foto_url || ''), f2 = escJsArg(r.loesung_foto_url || '');
+
+            const pBtns = [];
+            if (r.foto_url) pBtns.push(`<button id="fb-d-${r.id}" class="btn-switch" onclick="togglePrivatePhoto('fx-d-${r.id}','fb-d-${r.id}','${f1}','Defekt-Foto','Ausblenden','Defekt-Foto')">Defekt-Foto</button>`);
+            if (r.loesung_foto_url) pBtns.push(`<button id="fb-s-${r.id}" class="btn-switch" style="border-color:var(--green);color:#7ee787;" onclick="togglePrivatePhoto('fx-s-${r.id}','fb-s-${r.id}','${f2}','Lösungs-Foto','Ausblenden','Lösungs-Foto')">Lösungs-Foto</button>`);
+
+            let acts = '';
+            if (canM) {
+                acts += r.verifiziert
+                    ? `<button class="btn-switch" onclick="openFeedReportModal(${r.id})">Bearbeiten</button>`
+                    : `<button class="btn-green" onclick="openFeedReportModal(${r.id})">Verifizieren</button>`;
+                if (peers.length) acts += `<button class="btn-switch" onclick="openMerge(${r.id})">Anhängen</button>`;
+                if (r.status === 'offen') acts += `<button class="btn-green" onclick="openResolve(${r.id})">Behoben</button>`;
+            }
+            if (hasPerm('request_parts') && r.status === 'offen') {
+                acts += `<button class="btn-yellow" onclick="window.location.href='/ersatzteile/anfordern/${r.pinballId}/${r.id}'">+ Ersatzteil</button>`;
+            }
+            if (canM) acts += `<button class="btn-report" onclick="deleteRep(${r.id}, '${f1}', '${f2}')">Löschen</button>`;
+
+            return `
+                <div class="report-comment ${r.status === 'behoben' ? 'resolved-card' : (!r.verifiziert ? 'unverified-card' : '')}" style="border-left:5px solid ${r.status === 'behoben' ? 'var(--green)' : pCol};">
+                    <div class="report-header-bar">
+                        <div style="display:flex; gap:7px; align-items:center; flex-wrap:wrap;">
+                            <span class="flipper-origin-badge" onclick="openFlipper(${r.pinballId}, '${r.status}')">📍 ${escHtml(pinName(r.pinballId))}</span>
+                            <span class="badge-prio badge-prio-${r.prio}">${pLbl}</span>
+                            ${r.verifiziert ? '<span class="badge-verified">Verifiziert</span>' : '<span class="badge-unverified">UNVERIFIZIERT</span>'}
+                            ${r.mergeCount >= 2 ? `<span class="badge-merged">🔗 ${r.mergeCount}x</span>` : ''}
+                            ${linkedParts ? `<span class="badge-part-status part-status-benoetigt" style="cursor:pointer;" onclick="window.location.href='/ersatzteile'">🔧 ${linkedParts} Teil(e)</span>` : ''}
+                            ${r.status === 'behoben' ? `<span class="badge-resolved">Behoben ${formatDateTime(r.behobenAm || r.date)}</span>` : ''}
+                        </div>
+                        <span style="color:var(--muted); font-size:12px;">${formatDateTime(r.date)}</span>
+                    </div>
+                    <div class="report-body-text">${escHtml(r.text)}</div>
+                    ${r.ursache ? `<div class="report-cause-box"><strong>Ursache:</strong> ${escHtml(r.ursache)}</div>` : ''}
+                    ${(r.status === 'behoben' && r.loesungsweg) ? `<div class="report-solution-box"><strong>Lösung:</strong> ${escHtml(r.loesungsweg)}</div>` : ''}
+                    ${r.email ? `<div class="report-meta-email">E-Mail: <strong>${escHtml(r.email)}</strong></div>` : ''}
+                    <div id="fx-d-${r.id}" style="margin:8px 0; display:none;"></div>
+                    <div id="fx-s-${r.id}" style="margin:8px 0; display:none;"></div>
+                    <div class="report-actions">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">${pBtns.join('')}</div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">${acts}</div>
+                    </div>
+                </div>`;
+        }
+
+        function buildHsCard(h) {
+            const canV = hasPerm('verify_highscores');
+            const sf = escJsArg(h.beweisfoto || '');
+            return `
+                <div class="report-comment ${!h.verifiziert ? 'unverified-card' : ''}" style="border-left:5px solid ${h.verifiziert ? 'var(--green)' : 'var(--gold)'};">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <div style="display:flex; align-items:center; gap:9px; flex-wrap:wrap;">
+                            <span class="flipper-origin-badge" onclick="openFlipper(${h.pinballId}, 'highscore')">🏆 ${escHtml(pinName(h.pinballId))}</span>
+                            ${h.verifiziert ? '<span class="badge-verified">Verifiziert</span>' : '<span class="badge-unverified">UNVERIFIZIERT</span>'}
+                            <strong style="color:var(--gold-l);">${escHtml(getFormattedPlayerDisplay(h.initials, h.pinballId))}</strong>
+                            — <strong style="font-size:16px;">${formatScore(h.score)} Punkte</strong>
+                            <span style="color:var(--muted); font-size:12px;">(${formatDateTime(h.date)})</span>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            ${(!h.verifiziert && canV) ? `<button class="btn-green" onclick="openVhs(${h.id})">Verifizieren</button>` : ''}
+                            ${canV ? `<button class="btn-report" onclick="delHs(${h.id}, '${sf}')">Löschen</button>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function renderFeed() {
+            renderTechSubnav('tech-subnav', feedMode);
+            document.getElementById('feed-add-btn').classList.toggle('hidden', !hasPerm('manage_reports'));
+
+            const ctrl = document.getElementById('feed-controls');
+            ctrl.className = 'report-controls' + (feedMode === 'archiv' ? ' resolved-mode-controls' : ((feedMode === 'eingang' || feedMode === 'highscores') ? ' highscore-mode-controls' : ''));
+            document.getElementById('pills-uv').classList.toggle('hidden', feedMode !== 'eingang');
+            document.getElementById('pills-rep').classList.toggle('hidden', feedMode !== 'defekte' && feedMode !== 'archiv');
+            document.getElementById('pills-hs').classList.toggle('hidden', feedMode !== 'highscores');
+
+            const pf = document.getElementById('pin-filter').value;
+            const sort = document.getElementById('feed-sort').value;
+            const matchPin = (id) => pf === 'all' || String(id) === String(pf);
+            const box = document.getElementById('feed-list');
+
+            if (feedMode === 'eingang') {
+                const items = [];
+                if (hasPerm('view_reports') && uvFilter.reports) {
+                    reportsDB.filter((r) => r.status === 'offen' && !r.verifiziert && matchPin(r.pinballId))
+                        .forEach((r) => items.push({ k: 'r', t: new Date(r.date).getTime() || 0, p: pinName(r.pinballId), d: r }));
+                }
+                if (hasPerm('verify_highscores') && uvFilter.hs) {
+                    highscoresDB.filter((h) => !h.verifiziert && matchPin(h.pinballId))
+                        .forEach((h) => items.push({ k: 'h', t: new Date(h.date).getTime() || 0, p: pinName(h.pinballId), d: h }));
+                }
+                items.sort((a, b) => sort === 'date-asc' ? a.t - b.t : (sort === 'pin-asc' ? a.p.localeCompare(b.p, 'de') : b.t - a.t));
+                box.innerHTML = items.length ? items.map((x) => x.k === 'r' ? buildReportCard(x.d) : buildHsCard(x.d)).join('')
+                    : '<p style="color:#7ee787; font-weight:bold; padding:14px;">✓ Prüf-Eingang ist leer — alles verifiziert!</p>';
+                return;
+            }
+
+            if (feedMode === 'highscores') {
+                const list = highscoresDB.filter((h) => matchPin(h.pinballId) && (h.verifiziert ? hsFilter.verif : hsFilter.unverif)).sort((a, b) => {
+                    if (sort === 'hs-score') return b.score - a.score;
+                    if (sort === 'hs-date') return new Date(b.date) - new Date(a.date);
+                    if (sort === 'pin-asc') return pinName(a.pinballId).localeCompare(pinName(b.pinballId), 'de');
+                    if (a.verifiziert !== b.verifiziert) return a.verifiziert ? 1 : -1;
+                    return new Date(b.date) - new Date(a.date);
+                });
+                box.innerHTML = list.length ? list.map(buildHsCard).join('') : '<p style="color:var(--muted);"><i>Keine Highscores gefunden.</i></p>';
+                return;
+            }
+
+            const statusTarget = feedMode === 'archiv' ? 'behoben' : 'offen';
+            const list = reportsDB.filter((r) => r.status === statusTarget && matchPin(r.pinballId)).filter((r) => (!r.verifiziert || !r.prio) ? repFilter.u : repFilter[r.prio] !== false);
+            list.sort((a, b) => {
+                const dA = new Date(a.date).getTime() || 0, dB = new Date(b.date).getTime() || 0;
+                const rA = new Date(a.behobenAm || a.date).getTime() || 0, rB = new Date(b.behobenAm || b.date).getTime() || 0;
+                if (sort === 'res-desc') return rB - rA;
+                if (sort === 'res-asc') return rA - rB;
+                if (sort === 'pin-asc') return pinName(a.pinballId).localeCompare(pinName(b.pinballId), 'de');
+                if (sort === 'merge-desc') return (b.mergeCount - a.mergeCount) || (dB - dA);
+                if (sort === 'prio-desc') {
+                    if (a.verifiziert !== b.verifiziert) return a.verifiziert ? 1 : -1;
+                    if (a.prio !== b.prio) return a.prio - b.prio;
+                }
+                return dB - dA;
+            });
+            box.innerHTML = list.length ? list.map(buildReportCard).join('') : '<p style="color:var(--muted);"><i>Keine Meldungen für diese Auswahl vorhanden.</i></p>';
+        }
+
+        // --- MODAL-LOGIK ---
+
+        function openFeedReportModal(id) {
+            editId = id;
+            const sel = document.getElementById('mr-pin');
+            sel.innerHTML = [...pinballs].sort((a, b) => a.name.localeCompare(b.name, 'de')).map((p) => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+            document.getElementById('mr-file').value = '';
+            if (id === null) {
+                document.getElementById('mr-head').innerText = 'Neue Meldung';
+                sel.disabled = false;
+                document.getElementById('mr-prio').value = '2';
+                document.getElementById('mr-desc').value = '';
+                document.getElementById('mr-cause').value = '';
+            } else {
+                const r = reportsDB.find((x) => x.id === id);
+                if (!r) return;
+                document.getElementById('mr-head').innerText = r.verifiziert ? 'Meldung bearbeiten' : 'Verifizieren & Prio setzen';
+                sel.value = r.pinballId; sel.disabled = true;
+                document.getElementById('mr-prio').value = r.prio >= 1 && r.prio <= 3 ? String(r.prio) : '2';
+                document.getElementById('mr-desc').value = r.text;
+                document.getElementById('mr-cause').value = r.ursache || '';
+            }
+            document.getElementById('m-rep').classList.remove('hidden');
+        }
+        function closeFeedReportModal() { document.getElementById('m-rep').classList.add('hidden'); editId = null; }
+
+        async function saveFeedReportModal() {
+            const pinId = Number(document.getElementById('mr-pin').value);
+            const prio = parseInt(document.getElementById('mr-prio').value, 10);
+            const desc = document.getElementById('mr-desc').value.trim();
+            const cause = document.getElementById('mr-cause').value.trim();
+            const file = document.getElementById('mr-file').files[0];
+            if (!desc) { showActionToast('Bitte Beschreibung eingeben!', 'error'); return; }
+            const btn = document.getElementById('mr-save');
+            btn.disabled = true; btn.classList.add('btn-busy');
+            try {
+                const foto = file ? await uploadIncomingPhoto('reports', file) : null;
+                if (editId === null) {
+                    const { error } = await db.from('reports').insert([{ flipper_id: pinId, meldung: desc, ursache: cause, intensitaet: prio, status: 'offen', verifiziert: true, email: '', foto_url: foto || '', merge_count: 1 }]);
+                    if (error) throw error;
+                } else {
+                    const ex = reportsDB.find((x) => x.id === editId);
+                    const pl = { intensitaet: prio, meldung: desc, ursache: cause, verifiziert: true };
+                    if (foto !== null) { if (ex?.foto_url) await db.storage.from('fotos-incoming').remove([ex.foto_url]); pl.foto_url = foto; }
+                    const { error } = await db.from('reports').update(pl).eq('id', editId);
+                    if (error) throw error;
+                }
+                closeFeedReportModal();
+                showActionToast('✓ Gespeichert!', 'success');
+                await reloadFeed();
+            } catch (e) { showActionToast('Fehler: ' + e.message, 'error'); }
+            finally { btn.disabled = false; btn.classList.remove('btn-busy'); }
+        }
+
+        function openResolve(id) { resolveId = id; document.getElementById('res-txt').value = ''; document.getElementById('res-file').value = ''; document.getElementById('m-res').classList.remove('hidden'); }
+        function closeResolve() { document.getElementById('m-res').classList.add('hidden'); resolveId = null; }
+        async function confirmResolve() {
+            if (!resolveId) return;
+            const btn = document.getElementById('res-btn');
+            btn.disabled = true; btn.classList.add('btn-busy');
+            try {
+                const foto = await uploadIncomingPhoto('reports', document.getElementById('res-file').files[0]);
+                const pl = { status: 'behoben', behoben_am: new Date().toISOString(), loesungsweg: document.getElementById('res-txt').value.trim() };
+                if (foto) pl.loesung_foto_url = foto;
+                const { error } = await db.from('reports').update(pl).eq('id', resolveId);
+                if (error) throw error;
+                closeResolve(); showActionToast('✓ Als behoben archiviert!', 'success'); await reloadFeed();
+            } catch (e) { showActionToast('Fehler: ' + e.message, 'error'); }
+            finally { btn.disabled = false; btn.classList.remove('btn-busy'); }
+        }
+
+        function openMerge(srcId) {
+            const s = reportsDB.find((r) => r.id === srcId);
+            if (!s) return;
+            const tgts = reportsDB.filter((r) => r.pinballId === s.pinballId && r.status === s.status && r.id !== srcId);
+            if (!tgts.length) return;
+            mergeId = srcId;
+            document.getElementById('mg-prev').innerHTML = `<strong>${escHtml(pinName(s.pinballId))} (${s.mergeCount}x):</strong> „${escHtml(s.text.substring(0, 85))}“`;
+            document.getElementById('mg-tgt').innerHTML = tgts.map((t) => `<option value="${t.id}">[${t.mergeCount}x] ${escHtml(t.text.substring(0, 65))}</option>`).join('');
+            updateMergeMath();
+            document.getElementById('m-merge').classList.remove('hidden');
+        }
+        function updateMergeMath() {
+            const s = reportsDB.find((r) => r.id === mergeId);
+            const t = reportsDB.find((r) => r.id === Number(document.getElementById('mg-tgt').value));
+            if (s && t) document.getElementById('mg-math').innerText = `Neuer Zähler: ${t.mergeCount} + ${s.mergeCount} = ${t.mergeCount + s.mergeCount}`;
+        }
+        function closeMerge() { document.getElementById('m-merge').classList.add('hidden'); mergeId = null; }
+        async function confirmMerge() {
+            const s = reportsDB.find((r) => r.id === mergeId);
+            const t = reportsDB.find((r) => r.id === Number(document.getElementById('mg-tgt').value));
+            if (!s || !t) return;
+            try {
+                const sum = t.mergeCount + s.mergeCount;
+                const emails = new Set();
+                [t.email, s.email].forEach((e) => (e || '').split(',').map((x) => x.trim()).filter(Boolean).forEach((x) => emails.add(x)));
+                const { error: uErr } = await db.from('reports').update({ merge_count: sum, email: Array.from(emails).join(', ') }).eq('id', t.id);
+                if (uErr) throw uErr;
+                const rm = [s.foto_url, s.loesung_foto_url].filter(Boolean);
+                if (rm.length) await db.storage.from('fotos-incoming').remove(rm);
+                const { error: dErr } = await db.from('reports').delete().eq('id', s.id);
+                if (dErr) throw dErr;
+                closeMerge(); showActionToast(`✓ Zusammengeführt (${sum}x)!`, 'success'); await reloadFeed();
+            } catch (e) { showActionToast('Fehler: ' + e.message, 'error'); }
+        }
+
+        async function deleteRep(id, f1, f2) {
+            if (!confirm('Meldung wirklich unwiderruflich löschen?')) return;
+            const rm = [f1, f2].filter(Boolean);
+            if (rm.length) await db.storage.from('fotos-incoming').remove(rm);
+            const { error } = await db.from('reports').delete().eq('id', id);
+            if (error) { showActionToast('Fehler: ' + error.message, 'error'); return; }
+            showActionToast('Meldung gelöscht.', 'info'); await reloadFeed();
+        }
+
+        async function openVhs(id) {
+            const h = highscoresDB.find((x) => x.id === id);
+            if (!h) return;
+            vhsId = id;
+            document.getElementById('vhs-sum').innerHTML = `Flipper: <strong style="color:var(--gold-l);">${escHtml(pinName(h.pinballId))}</strong><br>Spieler: <strong>${escHtml(getFormattedPlayerDisplay(h.initials, h.pinballId))}</strong><br>Punkte: <strong style="color:#7ee787; font-size:18px;">${formatScore(h.score)}</strong>`;
+            const box = document.getElementById('vhs-img');
+            document.getElementById('m-vhs').classList.remove('hidden');
+            if (!h.beweisfoto) { box.innerHTML = '<strong style="color:#ff7b72;">Kein Beweisfoto.</strong>'; return; }
+            box.innerHTML = '<i>Lade Beweisfoto...</i>';
+            const { data, error } = await db.storage.from('fotos-incoming').createSignedUrl(h.beweisfoto, 300);
+            box.innerHTML = (error || !data?.signedUrl)
+                ? `<span style="color:var(--red);">Fehler: ${escHtml(error?.message)}</span>`
+                : `<a href="${data.signedUrl}" target="_blank"><img src="${data.signedUrl}" style="max-width:100%; max-height:380px; border-radius:6px;"></a>`;
+        }
+        function closeVhs() { document.getElementById('m-vhs').classList.add('hidden'); vhsId = null; }
+        async function confirmVhs() {
+            const h = highscoresDB.find((x) => x.id === vhsId);
+            if (!h) return;
+            const prev = highscoresDB.filter((x) => x.pinballId === h.pinballId && x.verifiziert && x.id !== h.id && isSamePlayerIdentity(x.initials, h.initials, h.pinballId));
+            if (prev.length && h.score <= Math.max(...prev.map((x) => x.score))) { showActionToast('Spieler hat hier bereits einen höheren/gleichen Rekord!', 'error'); return; }
+            const btn = document.getElementById('vhs-ok');
+            btn.disabled = true; btn.classList.add('btn-busy');
+            try {
+                if (h.beweisfoto) await db.storage.from('fotos-incoming').remove([h.beweisfoto]);
+                const { error } = await db.from('highscore').update({ verifiziert: true, beweisfoto: '' }).eq('id', h.id);
+                if (error) throw error;
+                await removeOldLowerPlayerScores(h.pinballId, h.initials, h.id, h.score);
+                closeVhs(); showActionToast('✓ Highscore verifiziert & Foto gelöscht!', 'success'); await reloadFeed();
+            } catch (e) { showActionToast('Fehler: ' + e.message, 'error'); }
+            finally { btn.disabled = false; btn.classList.remove('btn-busy'); }
+        }
+        async function rejectVhs() {
+            const h = highscoresDB.find((x) => x.id === vhsId);
+            if (!h || !confirm('Highscore wirklich ablehnen und löschen?')) return;
+            if (h.beweisfoto) await db.storage.from('fotos-incoming').remove([h.beweisfoto]);
+            await db.from('highscore').delete().eq('id', h.id);
+            closeVhs(); showActionToast('Highscore gelöscht.', 'info'); await reloadFeed();
+        }
+        async function delHs(id, f) {
+            if (!confirm('Highscore wirklich löschen?')) return;
+            if (f) await db.storage.from('fotos-incoming').remove([f]);
+            const { error } = await db.from('highscore').delete().eq('id', id);
+            if (error) { showActionToast('Fehler: ' + error.message, 'error'); return; }
+            showActionToast('Highscore gelöscht.', 'info'); await reloadFeed();
+        }
+
+        async function reloadFeed() { await loadAllDatabaseData(); renderSharedHeader(); renderFeed(); }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const seg = getPathSegments()[1] || 'eingang';
+            feedMode = ['eingang', 'defekte', 'archiv', 'highscores'].includes(seg) ? seg : 'eingang';
+
+            await initSharedApp(() => {
+                if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+                renderFeed();
+            });
+            if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+
+            const canRep = hasPerm('view_reports'), canHs = hasPerm('verify_highscores');
+            if ((feedMode === 'defekte' || feedMode === 'archiv') && !canRep) { window.location.href = getDefaultTechUrl(); return; }
+            if (feedMode === 'highscores' && !canHs) { window.location.href = getDefaultTechUrl(); return; }
+            if (feedMode === 'eingang' && !canRep && !canHs) { window.location.href = getDefaultTechUrl(); return; }
+
+            initFilters();
+            renderFeed();
+        });
+    </script>
+</body>
+</html>

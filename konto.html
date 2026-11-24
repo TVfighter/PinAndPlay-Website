@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin&amp;Play - Meine Initialen</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header id="main-header"></header>
+
+    <div class="container" style="max-width: 720px;">
+        <div class="detail-header">
+            <div class="detail-header-left">
+                <button class="btn-back" onclick="navigateBackTo('/')" title="Zurück">←</button>
+                <h2 style="margin: 0;">Mein Account &amp; Highscore-Initialen</h2>
+            </div>
+        </div>
+
+        <div id="konto-summary" class="prev-score-banner" style="margin-bottom: 20px;"></div>
+
+        <p style="font-size: 14px; color: var(--muted); line-height: 1.55; margin-top: 0;">
+            Hinterlege hier deine Highscore-Initialen. Sie sind exklusiv für deinen Account geschützt (niemand sonst kann damit Highscores eintragen) und werden beim Eintragen neuer Highscores automatisch vorausgefüllt.
+        </p>
+
+        <div class="report-form">
+            <label><strong>3er-Standardkürzel (Für alle 3-Zeichen-Flipper, z. B. VAL)</strong></label>
+            <input type="text" id="acc-short-tag" maxlength="3" placeholder="Leer = kein Kürzel reserviert" oninput="this.value = this.value.toUpperCase().replace(/[^A-ZÄÖÜ0-9]/g, '')">
+
+            <div style="background: var(--elev); border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin-bottom: 16px;">
+                <div style="font-weight: bold; color: var(--gold-l); margin-bottom: 4px; font-size: 14px;">
+                    Flipper-spezifische Namen (Für Geräte mit mehr als 3 Zeichen, z. B. Stern / JJP)
+                </div>
+                <div style="font-size: 12px; color: var(--muted); margin-bottom: 12px;">
+                    Leer lassen, wenn an diesem Gerät einfach dein 3er-Standardkürzel verwendet werden soll.
+                </div>
+                <div id="konto-flipper-tags"></div>
+            </div>
+
+            <button id="konto-save-btn" class="btn-green" style="width: 100%; padding: 14px;" onclick="saveMyInitials()">Initialen speichern</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/app.js"></script>
+    <script>
+        function renderKontoForm() {
+            if (!currentUserAccount) return;
+            document.getElementById('konto-summary').innerHTML = `
+                Account: <strong style="color:var(--gold-l);">${escHtml(currentUserAccount.display_name)}</strong>
+                (${escHtml(currentUserAccount.role_label || 'Mitglied')})<br>
+                Login: <span style="color:var(--muted);">${escHtml(currentUserAccount.email)}</span>
+            `;
+
+            document.getElementById('acc-short-tag').value = String(currentUserAccount.short_tag || '').toUpperCase();
+
+            const box = document.getElementById('konto-flipper-tags');
+            const longPins = pinballs.filter((p) => p.hsMaxLength > 3);
+            const savedMap = (currentUserAccount.flipper_tags && typeof currentUserAccount.flipper_tags === 'object') ? currentUserAccount.flipper_tags : {};
+
+            if (longPins.length === 0) {
+                box.innerHTML = '<i style="font-size:12px; color:var(--muted);">Keine Flipper mit mehr als 3 Zeichen vorhanden.</i>';
+                return;
+            }
+
+            box.innerHTML = longPins.map((p) => {
+                const val = String(savedMap[String(p.id)] || '');
+                return `
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                        <span style="font-size:13px; flex:1; min-width:170px;">${escHtml(p.name)} <span style="color:var(--muted);">(max. ${p.hsMaxLength})</span>:</span>
+                        <input type="text" class="konto-pin-tag" data-pin-id="${p.id}" maxlength="${p.hsMaxLength}" value="${escHtml(val)}" placeholder="Standard (3er-Kürzel)" style="width:175px; margin:0; padding:7px 9px;" oninput="this.value = this.value.toUpperCase()">
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function saveMyInitials() {
+            const shortTag = document.getElementById('acc-short-tag').value.trim().toUpperCase();
+            const map = {};
+            document.querySelectorAll('.konto-pin-tag').forEach((inp) => {
+                const v = inp.value.trim().toUpperCase();
+                if (v) map[inp.dataset.pinId] = v;
+            });
+
+            const btn = document.getElementById('konto-save-btn');
+            btn.disabled = true;
+            btn.classList.add('btn-busy');
+            try {
+                const { error } = await db.rpc('update_my_account_initials', {
+                    p_short_tag: shortTag,
+                    p_flipper_tags: map
+                });
+                if (error) throw error;
+                await loadAllDatabaseData();
+                renderKontoForm();
+                showActionToast('✓ Deine Highscore-Initialen wurden gespeichert!', 'success');
+            } catch (err) {
+                showActionToast('Fehler: ' + err.message, 'error', 4500);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('btn-busy');
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initSharedApp(() => {
+                if (!isLoggedIn) redirectToLoginWithReturn();
+            });
+            if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+            renderKontoForm();
+        });
+    </script>
+</body>
+</html>
