@@ -12,7 +12,7 @@
     <div class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="navigateBackTo('techniker')" title="Zurück zum Techniker-Dashboard">←</button>
+               <button class="btn-back" onclick="navigateBackTo(hasAnyTechCenterAccess() ? 'tech-feed' : './')" title="Zurück">←</button>
                 <h2 style="margin: 0;">Eingegangenes Spieler-Feedback (<span id="feedback-total-count">0</span>)</h2>
             </div>
             <div class="detail-header-actions">
@@ -103,36 +103,31 @@
         }
 
        window.addEventListener('DOMContentLoaded', async () => {
-    await initSharedApp(() => {
-        if (!isLoggedIn) {
-            redirectToLoginWithReturn();
-            return;
-        }
-        if (!hasPerm('view_feedback')) {
-            showActionToast("Keine Berechtigung für Spieler-Feedback.", "error");
-            window.location.href = './';
-            return;
-        }
-        renderFeedbackList();
-    });
+            await initSharedApp(() => {
+                if (!isLoggedIn) {
+                    redirectToLoginWithReturn();
+                    return;
+                }
+                if (!hasPerm('view_feedback')) {
+                    showActionToast("Keine Berechtigung für Spieler-Feedback.", "error");
+                    window.location.href = './';
+                    return;
+                }
+                renderFeedbackList();
+            });
 
-    if (!isLoggedIn) {
-        redirectToLoginWithReturn();
-        return;
-    }
-    if (!hasPerm('view_feedback')) {
-        showActionToast("Keine Berechtigung für Spieler-Feedback.", "error");
-        window.location.href = './';
-        return;
-    }
-    if (!isTechMode) {
-        isTechMode = true;
-        localStorage.setItem('pinplay_tech_mode', 'true');
-        renderSharedHeader();
-    }
+            if (!isLoggedIn) {
+                redirectToLoginWithReturn();
+                return;
+            }
+            if (!hasPerm('view_feedback')) {
+                showActionToast("Keine Berechtigung für Spieler-Feedback.", "error");
+                window.location.href = './';
+                return;
+            }
 
-    renderFeedbackList();
-});
+            renderFeedbackList();
+        });
     </script>
 </body>
 </html>

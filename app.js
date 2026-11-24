@@ -65,7 +65,7 @@ const db = window.supabase.createClient(supabaseUrl, supabaseKey, {
 });
 
 const OFFICIAL_HOMEPAGE_URL = './';
-const CACHE_KEY_STATE = 'pinplay_full_data_cache_v8';
+const CACHE_KEY_STATE = 'pinplay_full_data_cache_v9';
 const CACHE_TTL_MS = 15 * 1000;
 const LIVE_SYNC_INTERVAL_MS = 15 * 1000;
 
@@ -81,17 +81,16 @@ let partsTagsDB = [];
 let accountsDB = [];
 let currentUserAccount = null;
 let isLoggedIn = false;
-let isTechMode = false;
+let isTechMode = false; // Veraltet, nur noch als stiller Kompatibilitäts-Wert erhalten
 let hasValidDailyToken = false;
 let currentPageUpdateCallback = null;
 let liveSyncTimer = null;
 let isRestoringScroll = true;
 
-// --- GRANULARES BERECHTIGUNGSSYSTEM ---
+// --- GRANULARES BERECHTIGUNGSSYSTEM (OHNE TECHNIKERMODUS) ---
 
 function hasPerm(permKey) {
     if (!isLoggedIn || !currentUserAccount) return false;
-    // Admin besitzt automatisch sämtliche Rechte
     if (currentUserAccount.perm_manage_accounts === true) return true;
 
     switch (permKey) {
@@ -123,8 +122,11 @@ function hasPerm(permKey) {
             return currentUserAccount.perm_manage_parts === true;
         case 'view_feedback':
             return currentUserAccount.perm_view_feedback === true;
+        case 'manage_qr':
         case 'manage_players_qr':
             return currentUserAccount.perm_manage_players_qr === true;
+        case 'manage_all_players':
+            return currentUserAccount.perm_manage_all_players === true;
         default: {
             const col = permKey.startsWith('perm_') ? permKey : `perm_${permKey}`;
             return currentUserAccount[col] === true;
@@ -132,26 +134,21 @@ function hasPerm(permKey) {
     }
 }
 
-function getReportAccessLevel(acc = currentUserAccount) {
-    if (!acc) return 0;
-    if (acc.perm_manage_accounts || acc.perm_manage_reports) return 3;
-    if (acc.perm_view_reports) return 2;
-    if (acc.perm_auto_verify_reports) return 1;
-    return 0;
+function hasAnyTechCenterAccess() {
+    if (!isLoggedIn || !currentUserAccount) return false;
+    return hasPerm('power_off') || hasPerm('view_reports') || hasPerm('verify_highscores');
 }
 
 function hasAnyAdminAreaAccess() {
     if (!isLoggedIn || !currentUserAccount) return false;
     return !!(
-        currentUserAccount.perm_manage_accounts ||
-        currentUserAccount.perm_power_off ||
-        currentUserAccount.perm_view_reports ||
-        currentUserAccount.perm_manage_reports ||
-        currentUserAccount.perm_verify_highscores ||
-        currentUserAccount.perm_request_parts ||
-        currentUserAccount.perm_manage_parts ||
-        currentUserAccount.perm_view_feedback ||
-        currentUserAccount.perm_manage_players_qr
+        hasAnyTechCenterAccess() ||
+        hasPerm('request_parts') ||
+        hasPerm('manage_parts') ||
+        hasPerm('view_feedback') ||
+        hasPerm('manage_qr') ||
+        hasPerm('manage_all_players') ||
+        hasPerm('manage_accounts')
     );
 }
 
@@ -272,7 +269,6 @@ function stylePowerButton(btnElement, powerState) {
     btnElement.style.borderColor = powerState === 'ON' ? '#2ea043' : '#cf3432';
 }
 
-// Prüft, ob Account vom QR-Code befreit ist (perm_no_qr / Admin) ODER ein gültiges Tages-QR-Token gescannt wurde
 function ensureWritePermission() {
     if (hasPerm('no_qr') || hasValidDailyToken) {
         return true;
@@ -328,12 +324,12 @@ function getFormattedPlayerDisplay(rawInitials) {
     return `${upperRaw} (${prof.displayName})`;
 }
 
-// --- AUFGERÄUMTES HEADER-BANNER MIT DROPDOWNS ---
+// --- REIN RECHTEBASIERTES HEADER-BANNER (OHNE TECHNIKERMODUS) ---
 
 function getActiveNavTab() {
     const path = window.location.pathname;
     if (path.endsWith('highscores') || path.endsWith('highscores.html')) return 'highscores';
-    if (path.endsWith('tech-feed') || path.endsWith('tech-feed.html')) return 'tech-feed';
+    if (path.endsWith('tech-feed') || path.endsWith('tech-feed.html') || path.endsWith('techniker') || path.endsWith('techniker.html') || path.endsWith('tech-detail') || path.endsWith('tech-detail.html')) return 'tech-feed';
     if (path.endsWith('tech-parts') || path.endsWith('tech-parts.html')) return 'tech-parts';
     if (path.endsWith('tech-feedback') || path.endsWith('tech-feedback.html')) return 'tech-feedback';
     if (path.endsWith('tech-players') || path.endsWith('tech-players.html')) return 'tech-players';
@@ -360,55 +356,56 @@ function renderSharedHeader() {
     const header = document.getElementById('main-header');
     if (!header) return;
 
-    const canUseTechArea = hasAnyAdminAreaAccess();
-    const techActive = isLoggedIn && isTechMode && canUseTechArea;
-
-    if (techActive) header.classList.add('tech-mode');
+    const hasStaffRights = hasAnyAdminAreaAccess();
+    if (hasStaffRights) header.classList.add('tech-mode');
     else header.classList.remove('tech-mode');
 
     const activeTab = getActiveNavTab();
     const cls = (tab) => activeTab === tab ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
 
-    let primaryTechHtml = '';
+    let rightBasedButtonsHtml = '';
     let manageMenuItems = [];
 
-    if (techActive) {
-        // 1. News-Feed direkt sichtbar
-        if (hasPerm('view_reports') || hasPerm('verify_highscores')) {
+    if (isLoggedIn) {
+        // 1. Technik-Center (ersetzt Techniker-Dashboard + News-Feed)
+        if (hasAnyTechCenterAccess()) {
             const unverifReps = hasPerm('view_reports') ? reportsDB.filter(r => r.status === 'offen' && !r.verifiziert).length : 0;
             const unverifHs = hasPerm('verify_highscores') ? highscoresDB.filter(h => !h.verifiziert).length : 0;
             const totalUnverif = unverifReps + unverifHs;
-            const feedBadge = totalUnverif > 0 ? `<span class="badge-nav-count">${totalUnverif}</span>` : '';
-            primaryTechHtml += `<button class="${cls('tech-feed')}" onclick="window.location.href='tech-feed'">News-Feed${feedBadge}</button>`;
+            const badge = totalUnverif > 0 ? `<span class="badge-nav-count">${totalUnverif}</span>` : '';
+            rightBasedButtonsHtml += `<button class="${cls('tech-feed')}" onclick="window.location.href='tech-feed'">Technik${badge}</button>`;
         }
 
-        // 2. Ersatzteile & Inventar direkt sichtbar
+        // 2. Ersatzteile & Inventar
         if (hasPerm('request_parts') || hasPerm('manage_parts') || hasPerm('view_reports')) {
             const openParts = partsOrdersDB.filter(p => p.status === 'benoetigt').length;
             const partsBadge = openParts > 0 ? `<span class="badge-nav-count count-gold">${openParts}</span>` : '';
-            primaryTechHtml += `<button class="${cls('tech-parts')}" onclick="window.location.href='tech-parts'">Ersatzteile${partsBadge}</button>`;
+            rightBasedButtonsHtml += `<button class="${cls('tech-parts')}" onclick="window.location.href='tech-parts'">Ersatzteile${partsBadge}</button>`;
         }
 
-        // 3. Seltener genutzte Verwaltungsseiten sauber im "Verwaltung ▾"-Menü bündeln
+        // 3. Verwaltung-Dropdown (rein rechtebasiert, QR getrennt von Spielerprofilen)
         if (hasPerm('view_feedback')) {
             const fbBadge = feedbackDB.length > 0 ? `<span class="badge-nav-count count-gold">${feedbackDB.length}</span>` : '';
             manageMenuItems.push(`<button class="nav-dropdown-item ${activeTab === 'tech-feedback' ? 'item-active' : ''}" onclick="window.location.href='tech-feedback'"><span>Spieler-Feedback</span>${fbBadge}</button>`);
         }
-        if (hasPerm('manage_players_qr')) {
-            manageMenuItems.push(`<button class="nav-dropdown-item ${activeTab === 'tech-players' ? 'item-active' : ''}" onclick="window.location.href='tech-players'"><span>Kürzel &amp; Tages-QR</span></button>`);
+        if (hasPerm('manage_qr')) {
+            manageMenuItems.push(`<button class="nav-dropdown-item" onclick="window.location.href='tech-players?view=qr'"><span>Tages-QR-Code</span></button>`);
             manageMenuItems.push(`<button class="nav-dropdown-item" onclick="window.open('tv-highscores', '_blank')"><span>100"-TV Highscores</span><span>↗</span></button>`);
+        }
+        if (hasPerm('manage_all_players')) {
+            manageMenuItems.push(`<button class="nav-dropdown-item" onclick="window.location.href='tech-players?view=all'"><span>Alle Spieler-Profile</span></button>`);
         }
         if (hasPerm('manage_accounts')) {
             manageMenuItems.push(`<button class="nav-dropdown-item ${activeTab === 'tech-accounts' ? 'item-active' : ''}" onclick="window.location.href='tech-accounts'"><span>Accounts &amp; Rechte</span></button>`);
         }
 
         if (manageMenuItems.length > 0) {
-            const manageActive = ['tech-feedback', 'tech-players', 'tech-accounts'].includes(activeTab);
+            const manageActive = ['tech-feedback', 'tech-accounts'].includes(activeTab);
             const manageBtnClass = manageActive ? 'btn-nav-page btn-nav-active' : 'btn-nav-page';
             const manageCount = hasPerm('view_feedback') ? feedbackDB.length : 0;
             const manageBadge = manageCount > 0 ? `<span class="badge-nav-count count-gold">${manageCount}</span>` : '';
 
-            primaryTechHtml += `
+            rightBasedButtonsHtml += `
                 <div class="nav-dropdown">
                     <button class="${manageBtnClass}" onclick="toggleHeaderDropdown('header-manage-menu', event)">Verwaltung${manageBadge} ▾</button>
                     <div id="header-manage-menu" class="nav-dropdown-menu hidden" onclick="event.stopPropagation()">
@@ -419,17 +416,13 @@ function renderSharedHeader() {
         }
     }
 
-    // Kompakter Account-Button rechts (bündelt Techniker-Modus-Schalter & Logout)
+    // Account-Dropdown (inkl. "Mein Spieler-Profil" für jeden eingeloggten Account)
     let accountMenuHtml = '';
     if (isLoggedIn) {
         const displayName = (currentUserAccount && currentUserAccount.display_name) ? currentUserAccount.display_name : 'Account';
         const roleLabel = (currentUserAccount && currentUserAccount.role_label) ? currentUserAccount.role_label : '';
         const safeName = displayName.replace(/</g, '&lt;');
         const safeRole = roleLabel.replace(/</g, '&lt;');
-
-        const techSwitchItem = canUseTechArea
-            ? `<button class="nav-dropdown-item" onclick="toggleTechMode()"><span>Techniker Modus</span><strong style="color:${isTechMode ? '#7ee787' : '#ff7b72'};">${isTechMode ? 'AN' : 'AUS'}</strong></button>`
-            : '';
 
         accountMenuHtml = `
             <div class="nav-dropdown">
@@ -439,7 +432,7 @@ function renderSharedHeader() {
                         <strong>${safeName}</strong>
                         <span>${safeRole || 'Eingeloggt'}</span>
                     </div>
-                    ${techSwitchItem}
+                    <button class="nav-dropdown-item" onclick="window.location.href='tech-players?view=me'"><span>Mein Spieler-Profil</span></button>
                     <button class="nav-dropdown-item item-danger" onclick="doLogout()"><span>Logout</span></button>
                 </div>
             </div>
@@ -453,13 +446,13 @@ function renderSharedHeader() {
         <div class="quick-actions">
             <button class="${cls('overview')}" onclick="goHome()">Übersicht</button>
             <button class="${cls('highscores')}" onclick="window.location.href='highscores'">Highscores</button>
-            ${primaryTechHtml}
+            ${rightBasedButtonsHtml}
             ${accountMenuHtml}
         </div>
     `;
 }
 
-// --- LOGIN / LOGOUT ---
+// --- LOGIN / LOGOUT (KEIN BACKDROP-SCHLIESSEN BEIM NEBENKLICKEN) ---
 
 function ensureLoginModalExists() {
     if (document.getElementById('global-login-modal')) return;
@@ -497,12 +490,7 @@ function checkHashLogin() {
                 window.location.href = savedRedirect;
                 return;
             }
-            if (hasAnyAdminAreaAccess()) {
-                localStorage.setItem('pinplay_tech_mode', 'true');
-                window.location.href = 'techniker';
-            } else {
-                window.location.href = './';
-            }
+            window.location.href = './';
         } else {
             modal.classList.remove('hidden');
         }
@@ -536,11 +524,10 @@ async function doLogin() {
         window.location.hash = '';
         isLoggedIn = true;
         localStorage.setItem('pinplay_logged_in', 'true');
+        localStorage.removeItem('pinplay_tech_mode');
         localStorage.removeItem(CACHE_KEY_STATE);
 
         await loadCurrentUserAccount(data?.user?.id);
-        const canAdmin = hasAnyAdminAreaAccess();
-        localStorage.setItem('pinplay_tech_mode', canAdmin ? 'true' : 'false');
 
         const savedRedirect = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
         if (savedRedirect) {
@@ -549,7 +536,7 @@ async function doLogin() {
             return;
         }
 
-        window.location.href = canAdmin ? 'techniker' : './';
+        window.location.href = hasAnyTechCenterAccess() ? 'tech-feed?tab=dashboard' : './';
     }
 }
 
@@ -563,37 +550,7 @@ async function doLogout() {
 }
 
 function goHome() {
-    if (isTechMode && hasAnyAdminAreaAccess()) window.location.href = 'techniker';
-    else window.location.href = './';
-}
-
-function toggleTechMode() {
-    if (!isLoggedIn || !hasAnyAdminAreaAccess()) return;
-    isTechMode = !isTechMode;
-    localStorage.setItem('pinplay_tech_mode', isTechMode ? 'true' : 'false');
-
-    const path = window.location.pathname;
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
-    const fromSuffix = navOriginDetail ? `&from=${navOriginDetail}` : '';
-
-    if (isTechMode) {
-        if ((path.endsWith('detail') || path.endsWith('/detail') || path.endsWith('detail.html')) && id) {
-            window.location.href = `tech-detail?id=${id}${fromSuffix}`;
-        } else if (path.endsWith('highscores') || path.endsWith('/highscores') || path.endsWith('highscores.html')) {
-            window.location.reload();
-        } else {
-            window.location.href = 'techniker';
-        }
-    } else {
-        if ((path.endsWith('tech-detail') || path.endsWith('/tech-detail') || path.endsWith('tech-detail.html')) && id) {
-            window.location.href = `detail?id=${id}${fromSuffix}`;
-        } else if (path.endsWith('highscores') || path.endsWith('/highscores') || path.endsWith('highscores.html')) {
-            window.location.reload();
-        } else {
-            window.location.href = './';
-        }
-    }
+    window.location.href = './';
 }
 
 window.addEventListener('hashchange', checkHashLogin);
@@ -711,15 +668,14 @@ function startLiveSyncPolling() {
 async function initSharedApp(onBackgroundUpdate = null) {
     currentPageUpdateCallback = onBackgroundUpdate;
     isLoggedIn = localStorage.getItem('pinplay_logged_in') === 'true';
+    localStorage.removeItem('pinplay_tech_mode');
     const cacheStatus = restoreStateFromCache();
-    isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
     renderSharedHeader();
     checkHashLogin();
 
     if (cacheStatus.loaded) {
         if (isLoggedIn && !currentUserAccount) {
             await loadCurrentUserAccount();
-            isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
             renderSharedHeader();
         }
         if (!hasValidDailyToken && (hasPerm('no_qr') || localStorage.getItem(DAILY_TOKEN_KEY))) {
@@ -736,7 +692,6 @@ async function initSharedApp(onBackgroundUpdate = null) {
                 await syncSessionInBackground();
                 await loadAllDatabaseData();
                 await verifyDailyTokenStatus();
-                isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
                 renderSharedHeader();
                 if (typeof currentPageUpdateCallback === 'function') currentPageUpdateCallback();
             })();
@@ -749,7 +704,6 @@ async function initSharedApp(onBackgroundUpdate = null) {
     await syncSessionInBackground();
     await loadAllDatabaseData();
     await verifyDailyTokenStatus();
-    isTechMode = isLoggedIn && hasAnyAdminAreaAccess() && localStorage.getItem('pinplay_tech_mode') === 'true';
     renderSharedHeader();
     setTimeout(restoreScrollPositionIfNeeded, 20);
     startLiveSyncPolling();
@@ -762,9 +716,7 @@ async function syncSessionInBackground() {
         if (realLoggedIn !== isLoggedIn) {
             isLoggedIn = realLoggedIn;
             if (!isLoggedIn) {
-                localStorage.removeItem('pinplay_tech_mode');
                 localStorage.removeItem('pinplay_logged_in');
-                isTechMode = false;
                 currentUserAccount = null;
                 feedbackDB = [];
                 reportsDB = [];
@@ -822,6 +774,7 @@ async function loadAllDatabaseData() {
 
     playersDB = (dbPlayers || []).map(pl => ({
         id: pl.id,
+        ownerUserId: pl.owner_user_id || null,
         displayName: pl.display_name || '',
         shortInitials: (pl.short_tag || pl.short_initials || '').toUpperCase(),
         aliases: Array.isArray(pl.aliases) ? pl.aliases.map(a => String(a).toUpperCase()) : [],

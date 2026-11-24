@@ -12,7 +12,7 @@
     <div class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="navigateBackTo('techniker')" title="Zurück zum Techniker-Dashboard">←</button>
+                <button class="btn-back" onclick="navigateBackTo(hasAnyTechCenterAccess() ? 'tech-feed' : './')" title="Zurück">←</button>
                 <h2 style="margin: 0;">Ersatzteile, Einkaufsliste &amp; Inventar</h2>
             </div>
             <div class="detail-header-actions">
@@ -43,7 +43,7 @@
                 <select id="parts-pin-filter" class="bold-sort-select" style="min-width:200px; margin:0;" onchange="renderPartsView()"></select>
             </div>
 
-            <!-- TAG-SUCHE & FILTER (Im Inventar-Tab) -->
+            <!-- TAG-SUCHE, FILTER & LÖSCHEN (Im Inventar-Tab) -->
             <div id="inventory-tag-filter-wrap" class="hidden" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-subtle);">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
                     <span style="font-size:13px; font-weight:bold; color:var(--text-muted);">
@@ -62,36 +62,64 @@
         <div id="parts-list-container"></div>
     </div>
 
-    <!-- MODAL 1: TEILE ANFORDERN (NUR REGISTRIERTE TEILE, DURCHSUCHBARER DEFEKT + MEHRERE TEILE) -->
-    <div id="request-modal" class="modal-overlay hidden" onclick="if(event.target.id==='request-modal') closeRequestModal()">
-        <div class="modal-box" style="max-width: 650px;">
-            <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
+    <!-- MODAL 1: TEILE ANFORDERN (FARBLICH GETRENNT, TAG-SUCHE, MOBILE-SICHERES SCROLLEN, KEIN NEBENKLICK-SCHLIESSEN) -->
+    <div id="request-modal" class="modal-overlay hidden">
+        <div class="modal-box" style="max-width: 680px;">
+            <div class="detail-header" style="margin-bottom: 16px; padding-bottom: 10px;">
                 <h3 style="margin: 0;">Ersatzteile anfordern (Einkaufsliste)</h3>
                 <button class="btn-switch" onclick="closeRequestModal()">Abbrechen</button>
             </div>
             <div class="report-form">
-                <!-- 1. Defekt verknüpfen (Durchsuchbar nach Flippername, Kürzel, Text, Ursache, ID) -->
-                <label><strong>Defekt verknüpfen (Optional — nach Flipper, Kürzel oder Text suchen)</strong></label>
-                <div class="searchable-combo">
-                    <input type="text" id="req-defect-search" placeholder="Tippen zum Suchen (z.B. T2, Centaur, Spule, #14)..." onfocus="openDefectCombo()" oninput="renderDefectComboList()" autocomplete="off">
-                    <div id="req-defect-dropdown" class="searchable-combo-list hidden"></div>
-                </div>
-                <div id="req-selected-defect-box" style="margin-top:-8px; margin-bottom:14px; font-size:13px; color:var(--text-muted);"></div>
+                <!-- BEREICH 1 (GOLD): DEFEKT / FLIPPER VERKNÜPFEN -->
+                <div class="req-section-defect">
+                    <div class="req-section-title" style="color: var(--gold-light);">1. Defekt oder Flipper verknüpfen (Optional)</div>
+                    <div class="searchable-combo" style="margin-bottom: 10px;">
+                        <div class="search-with-mini-btn">
+                            <input type="text" id="req-defect-search" placeholder="Defekt suchen (Flippername, Kürzel, Text, #ID)..." onfocus="openDefectCombo()" oninput="renderDefectComboList()" autocomplete="off">
+                            <button type="button" id="req-defect-toggle-btn" class="btn-mini-tag-toggle" onclick="toggleDefectCombo()">Liste ▾</button>
+                        </div>
+                        <div id="req-defect-dropdown" class="searchable-combo-list hidden"></div>
+                    </div>
+                    <div id="req-selected-defect-box" style="margin-bottom:10px; font-size:13px; color:var(--text-muted);"></div>
 
-                <!-- Fallback Flipper-Auswahl wenn kein Defekt gewählt wurde -->
-                <div id="req-manual-pin-wrap">
-                    <label><strong>Alternativ: Nur einem Flipper / Lager zuordnen (Optional)</strong></label>
-                    <select id="req-manual-pin"></select>
-                </div>
-
-                <!-- 2. Mehrere registrierte Teile durchsuchbar hinzufügen -->
-                <label><strong>Registrierte Teile hinzufügen * (Mehrfachauswahl möglich)</strong></label>
-                <div class="searchable-combo">
-                    <input type="text" id="req-part-search" placeholder="Teil suchen nach Name, Nummer, Shop oder Tag..." onfocus="openPartCombo()" oninput="renderPartComboList()" autocomplete="off">
-                    <div id="req-part-dropdown" class="searchable-combo-list hidden"></div>
+                    <div id="req-manual-pin-wrap">
+                        <label style="font-size:12px; color:var(--text-muted);"><strong>Oder direkt einem Flipper / Lager zuordnen:</strong></label>
+                        <select id="req-manual-pin" style="margin-bottom:0;"></select>
+                    </div>
                 </div>
 
-                <div id="req-selected-parts-list" style="margin-bottom: 14px;"></div>
+                <!-- BEREICH 2 (BLAU): REGISTRIERTE TEILE SUCHEN & MEHRFACH HINZUFÜGEN -->
+                <div class="req-section-parts">
+                    <div class="req-section-title" style="color: #79c0ff;">2. Registrierte Teile auswählen * (Mehrfachauswahl)</div>
+
+                    <div class="searchable-combo" style="margin-bottom: 0;">
+                        <div class="search-with-mini-btn">
+                            <input type="text" id="req-part-search" placeholder="Teil suchen nach Name, Nummer oder Shop..." onfocus="openPartCombo()" oninput="onReqPartSearchInput()" autocomplete="off">
+                            <button type="button" id="req-tag-mode-btn" class="btn-mini-tag-toggle" onclick="toggleReqTagMode()" title="Nach Tags filtern"># Tags</button>
+                        </div>
+
+                        <!-- TAG-AUSWAHL (Erscheint per # Tags Mini-Button) -->
+                        <div id="req-tag-picker-box" class="hidden" style="margin-top:8px; padding:10px; background:var(--surface-input); border:1px solid var(--border-light); border-radius:6px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+                                <span style="font-size:12px; font-weight:bold; color:var(--gold-light);">Tags anklicken (zeigt alle passenden Teile):</span>
+                                <span id="req-clear-tags-btn" class="hidden" style="font-size:12px; color:var(--accent-yellow-hover); text-decoration:underline; cursor:pointer;" onclick="clearReqSearchTags()">Tags leeren</span>
+                            </div>
+                            <div id="req-tag-picker-chips" style="display:flex; gap:6px; flex-wrap:wrap; max-height:110px; overflow-y:auto;"></div>
+                        </div>
+
+                        <!-- SCROLLBARE TEILE-LISTE (Mit explizitem + Button gegen Fehlklicks beim Scrollen am Handy) -->
+                        <div id="req-part-dropdown" class="searchable-combo-list hidden" style="position:relative; top:auto; margin-top:8px;"></div>
+                    </div>
+
+                    <!-- KLAR ABGETRENNTER WARENKORB MIT AUSREICHEND ABSTAND -->
+                    <div class="req-cart-divider">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <strong style="font-size:13px; color:var(--text-main);">Ausgewählte Teile im Warenkorb (<span id="req-cart-count">0</span>):</strong>
+                            <button type="button" id="req-close-part-list-btn" class="btn-switch hidden" style="padding:3px 9px; font-size:11px;" onclick="closePartCombo()">Suchliste einklappen ▲</button>
+                        </div>
+                        <div id="req-selected-parts-list"></div>
+                    </div>
+                </div>
 
                 <label><strong>Notiz zur Anforderung (Optional)</strong></label>
                 <textarea id="req-notes" rows="2" placeholder="z.B. Dringend für Turnier am Wochenende..."></textarea>
@@ -101,8 +129,8 @@
         </div>
     </div>
 
-    <!-- MODAL 2: TEIL REGISTRIEREN / STAMMDATEN BEARBEITEN -->
-    <div id="part-modal" class="modal-overlay hidden" onclick="if(event.target.id==='part-modal') closePartModal()">
+    <!-- MODAL 2: TEIL REGISTRIEREN / STAMMDATEN BEARBEITEN (KEIN NEBENKLICK-SCHLIESSEN) -->
+    <div id="part-modal" class="modal-overlay hidden">
         <div class="modal-box" style="max-width: 620px;">
             <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
                 <h3 id="part-modal-title" style="margin: 0;">Neues Teil registrieren</h3>
@@ -133,9 +161,9 @@
                 <label><strong>Shop-Link / Produkt-URL (Optional)</strong></label>
                 <input type="url" id="pm-url" placeholder="https://...">
 
-                <!-- Multi-Tag-Auswahl + Neuen Tag erstellen -->
+                <!-- Multi-Tag-Auswahl + Neuen Tag erstellen + Tag löschen -->
                 <div style="background:var(--surface-elevated); border:1px solid var(--border-subtle); border-radius:6px; padding:12px; margin-bottom:14px;">
-                    <label style="display:block; margin-bottom:6px;"><strong>Tags (Optional — mehrere wählbar)</strong></label>
+                    <label style="display:block; margin-bottom:6px;"><strong>Tags (Optional — mehrere wählbar, × löscht Tag)</strong></label>
                     <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
                         <input type="text" id="pm-tag-search" placeholder="Tag suchen oder neu anlegen..." oninput="renderModalTagChips()" onkeydown="if(event.key==='Enter'){event.preventDefault(); createTagFromModal();}" style="flex:1; min-width:160px; margin:0; padding:7px 10px;">
                         <button type="button" class="btn-switch" onclick="createTagFromModal()">+ Tag erstellen</button>
@@ -151,8 +179,8 @@
         </div>
     </div>
 
-    <!-- MODAL 3: ONLINESHOP-CHECKOUT PRO SHOP (ALLE LINKS + MANUELLE ABWAHL) -->
-    <div id="checkout-modal" class="modal-overlay hidden" onclick="if(event.target.id==='checkout-modal') closeCheckoutModal()">
+    <!-- MODAL 3: ONLINESHOP-CHECKOUT PRO SHOP (KEIN NEBENKLICK-SCHLIESSEN) -->
+    <div id="checkout-modal" class="modal-overlay hidden">
         <div class="modal-box" style="max-width: 680px;">
             <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
                 <h3 id="co-modal-title" style="margin: 0;">Bestellung abschließen</h3>
@@ -177,8 +205,8 @@
         </div>
     </div>
 
-    <!-- MODAL 4: QR-CODE DIREKTZUGRIFF FÜR EIN TEIL (?part=ID) -->
-    <div id="qr-part-modal" class="modal-overlay hidden" onclick="if(event.target.id==='qr-part-modal') closeQrPartModal()">
+    <!-- MODAL 4: QR-CODE DIREKTZUGRIFF FÜR EIN TEIL (?part=ID) (KEIN NEBENKLICK-SCHLIESSEN) -->
+    <div id="qr-part-modal" class="modal-overlay hidden">
         <div class="modal-box" style="max-width: 560px;">
             <div class="detail-header" style="margin-bottom: 15px; padding-bottom: 10px;">
                 <h3 id="qrp-title" style="margin: 0;">Ersatzteil</h3>
@@ -231,6 +259,8 @@
         let selectedDefectId = null;
         let selectedDefectPinId = null;
         let selectedRequestParts = []; // [{ partId, quantity }]
+        let reqTagSearchMode = false;
+        let reqSelectedSearchTags = new Set();
 
         // State für Teil-Registrieren-Modal
         let editingPartId = null;
@@ -244,6 +274,10 @@
 
         function escHtml(s) {
             return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function escJsArg(s) {
+            return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         }
 
         function normalizeUrl(raw) {
@@ -302,7 +336,7 @@
             renderPartsView();
         }
 
-        // --- TAG-FILTER IM INVENTAR ---
+        // --- TAGS: FILTER, ERSTELLEN & DAUERHAFT LÖSCHEN ---
 
         function toggleInventoryTagFilter(tagName) {
             if (selectedTagFilters.has(tagName)) selectedTagFilters.delete(tagName);
@@ -329,9 +363,10 @@
             const wrap = document.getElementById('inventory-tag-chips');
             const q = (document.getElementById('tag-filter-search').value || '').trim().toLowerCase();
             const allTags = getAllUniqueTagNames().filter(t => !q || t.toLowerCase().includes(q));
+            const canManage = hasPerm('manage_parts');
 
             document.getElementById('clear-tag-filters-link').classList.toggle('hidden', selectedTagFilters.size === 0);
-            document.getElementById('btn-quick-new-tag').classList.toggle('hidden', !hasPerm('manage_parts'));
+            document.getElementById('btn-quick-new-tag').classList.toggle('hidden', !canManage);
 
             if (allTags.length === 0) {
                 wrap.innerHTML = '<span style="font-size:12px; color:var(--text-muted);">Keine passenden Tags gefunden.</span>';
@@ -340,8 +375,11 @@
 
             wrap.innerHTML = allTags.map(t => {
                 const active = selectedTagFilters.has(t);
-                const safeArg = t.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                return `<span class="tag-chip ${active ? 'tag-active' : ''}" onclick="toggleInventoryTagFilter('${safeArg}')"># ${escHtml(t)}</span>`;
+                const safeArg = escJsArg(t);
+                const delBtn = canManage
+                    ? `<span class="tag-delete-x" title="Tag dauerhaft löschen" onclick="event.stopPropagation(); deleteTagGlobally('${safeArg}')">×</span>`
+                    : '';
+                return `<span class="tag-chip ${active ? 'tag-active' : ''}" onclick="toggleInventoryTagFilter('${safeArg}')"># ${escHtml(t)}${delBtn}</span>`;
             }).join('');
         }
 
@@ -358,6 +396,27 @@
             }
             await loadAllDatabaseData();
             return clean;
+        }
+
+        async function deleteTagGlobally(tagName) {
+            if (!hasPerm('manage_parts')) return;
+            if (!confirm(`Tag „#${tagName}“ wirklich dauerhaft löschen? Er wird dabei auch von allen zugeordneten Teilen entfernt.`)) return;
+
+            const { error } = await db.rpc('delete_part_tag', { p_tag_name: tagName });
+            if (error) {
+                showActionToast("Fehler beim Löschen des Tags: " + error.message, "error");
+                return;
+            }
+
+            selectedTagFilters.delete(tagName);
+            modalSelectedTags.delete(tagName);
+            reqSelectedSearchTags.delete(tagName);
+            await loadAllDatabaseData();
+            showActionToast(`Tag „#${tagName}“ gelöscht.`, "info");
+            renderPartsView();
+            if (!document.getElementById('part-modal').classList.contains('hidden')) {
+                renderModalTagChips();
+            }
         }
 
         async function promptQuickCreateTag() {
@@ -438,7 +497,6 @@
                 return;
             }
 
-            // Gruppierung nach Shop
             const shopGroups = new Map();
             filtered.forEach(o => {
                 const shop = getOrderEffectiveShop(o);
@@ -458,13 +516,10 @@
                 let hasAnyPrice = false;
                 items.forEach(it => {
                     const pr = getOrderEffectivePrice(it);
-                    if (pr !== null) {
-                        totalSum += pr * it.quantity;
-                        hasAnyPrice = true;
-                    }
+                    if (pr !== null) { totalSum += pr * it.quantity; hasAnyPrice = true; }
                 });
 
-                const safeShopArg = shop.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const safeShopArg = escJsArg(shop);
                 const itemIdsJson = JSON.stringify(items.map(i => i.id));
                 const sumText = hasAnyPrice ? `<span style="color:var(--gold-light); font-weight:800; font-size:15px;">ca. ${formatEuro(totalSum)}</span>` : '';
 
@@ -529,7 +584,7 @@
             }).join('');
         }
 
-        // TAB 2 & 4: BESTELLT & GELIEFERT-HISTORIE
+        // TAB 2 & 4: BESTELLT & GELIEFERT
         function renderOrderListTab(container, list, query, canManage, mode) {
             const pinVal = document.getElementById('parts-pin-filter').value;
             const filtered = list.filter(o => {
@@ -557,9 +612,7 @@
                 let btns = '';
                 if (canManage) {
                     if (mode === 'bestellt') {
-                        if (o.partId) {
-                            btns += `<button class="btn-green" onclick="markOrderDelivered(${o.id}, true)">✓ Geliefert (+${o.quantity} ins Lager)</button>`;
-                        }
+                        if (o.partId) btns += `<button class="btn-green" onclick="markOrderDelivered(${o.id}, true)">✓ Geliefert (+${o.quantity} ins Lager)</button>`;
                         btns += `<button class="btn-switch" style="border-color:var(--status-green); color:#7ee787;" onclick="markOrderDelivered(${o.id}, false)">✓ Geliefert (direkt verbaut)</button>`;
                         btns += `<button class="btn-switch" onclick="updateOrderStatus(${o.id}, 'benoetigt')">Zurück auf Liste</button>`;
                     } else {
@@ -594,10 +647,9 @@
             }).join('');
         }
 
-        // TAB 3: INVENTAR (MIT BESTANDS-STEPPER, MULTI-TAGS, QR-URL & STAMMDATEN-EDIT)
+        // TAB 3: INVENTAR
         function renderInventoryTab(container, query, canReq, canManage) {
             const list = partsCatalogDB.filter(c => {
-                // Multi-Tag-Filter (Teil muss alle ausgewählten Tags enthalten)
                 for (const reqTag of selectedTagFilters) {
                     if (!(c.tags || []).includes(reqTag)) return false;
                 }
@@ -615,7 +667,7 @@
                 const url = normalizeUrl(c.shopUrl);
                 const qtyClass = c.stockQty <= 0 ? 'stock-zero' : (c.stockQty <= 2 ? 'stock-low' : 'stock-ok');
                 const tagsHtml = (c.tags || []).map(t => {
-                    const safeArg = t.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    const safeArg = escJsArg(t);
                     return `<span class="tag-chip" onclick="toggleInventoryTagFilter('${safeArg}')"># ${escHtml(t)}</span>`;
                 }).join(' ');
 
@@ -668,13 +720,12 @@
             showActionToast(`✓ QR-Code-URL kopiert: ${url}`, "success", 4200);
         }
 
-        // --- BESTAND EDITIEREN (ART 2 DER BEARBEITUNG) ---
+        // --- BESTAND EDITIEREN ---
 
         async function adjustPartStock(partId, delta) {
             const part = getCatalogPart(partId);
             if (!part) return;
-            const newQty = Math.max(0, Number(part.stockQty || 0) + delta);
-            await setPartStock(partId, newQty);
+            await setPartStock(partId, Math.max(0, Number(part.stockQty || 0) + delta));
         }
 
         async function promptExactStock(partId) {
@@ -697,7 +748,7 @@
             if (qrActivePartId === partId) renderQrPartStockControl();
         }
 
-        // --- TEIL REGISTRIEREN / STAMMDATEN BEARBEITEN (ART 1 DER BEARBEITUNG) ---
+        // --- TEIL REGISTRIEREN / STAMMDATEN BEARBEITEN ---
 
         function openPartModal(partId = null) {
             editingPartId = partId;
@@ -745,11 +796,15 @@
             modalSelectedTags.forEach(t => merged.add(t));
             const sorted = Array.from(merged).sort((a, b) => a.localeCompare(b, 'de'))
                 .filter(t => !q || t.toLowerCase().includes(q) || modalSelectedTags.has(t));
+            const canManage = hasPerm('manage_parts');
 
             box.innerHTML = sorted.map(t => {
                 const active = modalSelectedTags.has(t);
-                const safeArg = t.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                return `<span class="tag-chip ${active ? 'tag-active' : ''}" onclick="toggleModalTag('${safeArg}')">${active ? '✓ ' : '+ '}${escHtml(t)}</span>`;
+                const safeArg = escJsArg(t);
+                const delX = canManage
+                    ? `<span class="tag-delete-x" title="Tag dauerhaft löschen" onclick="event.stopPropagation(); deleteTagGlobally('${safeArg}')">×</span>`
+                    : '';
+                return `<span class="tag-chip ${active ? 'tag-active' : ''}" onclick="toggleModalTag('${safeArg}')">${active ? '✓ ' : '+ '}${escHtml(t)}${delX}</span>`;
             }).join('');
         }
 
@@ -816,7 +871,7 @@
             renderPartsView();
         }
 
-        // --- TEILE ANFORDERN MODAL (DURCHSUCHBARE DEFEKTE + MEHRERE REGISTRIERTE TEILE) ---
+        // --- TEILE ANFORDERN MODAL (GETRENNTE BEREICHE, TAG-SUCHE, MOBILE-SAFE MULTI-ADD) ---
 
         function openRequestModal(presetReportId = null, presetPartId = null, presetPinId = null) {
             if (partsCatalogDB.length === 0) {
@@ -826,12 +881,18 @@
             selectedDefectId = null;
             selectedDefectPinId = null;
             selectedRequestParts = [];
+            reqTagSearchMode = false;
+            reqSelectedSearchTags.clear();
 
             document.getElementById('req-defect-search').value = '';
             document.getElementById('req-part-search').value = '';
             document.getElementById('req-notes').value = '';
             document.getElementById('req-defect-dropdown').classList.add('hidden');
             document.getElementById('req-part-dropdown').classList.add('hidden');
+            document.getElementById('req-close-part-list-btn').classList.add('hidden');
+            document.getElementById('req-tag-picker-box').classList.add('hidden');
+            document.getElementById('req-tag-mode-btn').classList.remove('tag-mode-on');
+            document.getElementById('req-part-search').placeholder = 'Teil suchen nach Name, Nummer oder Shop...';
 
             const pinSel = document.getElementById('req-manual-pin');
             pinSel.innerHTML = '<option value="">Allgemein / Lager (Kein bestimmter Flipper)</option>';
@@ -842,17 +903,11 @@
             });
             if (presetPinId) pinSel.value = String(presetPinId);
 
-            if (presetReportId) {
-                selectDefectInModal(Number(presetReportId));
-            } else {
-                renderSelectedDefectBox();
-            }
+            if (presetReportId) selectDefectInModal(Number(presetReportId));
+            else renderSelectedDefectBox();
 
-            if (presetPartId) {
-                addPartToRequestList(Number(presetPartId));
-            } else {
-                renderSelectedRequestParts();
-            }
+            if (presetPartId) addPartToRequestList(Number(presetPartId), false);
+            else renderSelectedRequestParts();
 
             document.getElementById('request-modal').classList.remove('hidden');
         }
@@ -863,10 +918,15 @@
             document.getElementById('req-part-dropdown').classList.add('hidden');
         }
 
+        // Defekt-Auswahl (mit explizitem "Wählen"-Knopf gegen Fehlklicks beim Scrollen)
         function openDefectCombo() {
-            document.getElementById('req-part-dropdown').classList.add('hidden');
             renderDefectComboList();
             document.getElementById('req-defect-dropdown').classList.remove('hidden');
+        }
+        function toggleDefectCombo() {
+            const box = document.getElementById('req-defect-dropdown');
+            if (box.classList.contains('hidden')) openDefectCombo();
+            else box.classList.add('hidden');
         }
 
         function renderDefectComboList() {
@@ -875,7 +935,7 @@
             const openReps = reportsDB.filter(r => r.status === 'offen');
 
             if (openReps.length === 0) {
-                box.innerHTML = '<div class="searchable-combo-item" style="color:var(--text-muted);">Keine offenen Defekte verfügbar (nutze unten die Flipper-Auswahl).</div>';
+                box.innerHTML = '<div class="searchable-combo-row" style="color:var(--text-muted);">Keine offenen Defekte verfügbar (nutze unten die Flipper-Auswahl).</div>';
                 return;
             }
 
@@ -887,22 +947,25 @@
                     pin ? pin.name : '', pin ? pin.short : '', pin ? pin.maker : ''
                 ].join(' ').toLowerCase();
                 return hay.includes(q);
-            }).slice(0, 30);
+            }).slice(0, 40);
 
             if (matches.length === 0) {
-                box.innerHTML = '<div class="searchable-combo-item" style="color:var(--text-muted);">Kein passender Defekt gefunden.</div>';
+                box.innerHTML = '<div class="searchable-combo-row" style="color:var(--text-muted);">Kein passender Defekt gefunden.</div>';
                 return;
             }
 
             box.innerHTML = matches.map(r => {
                 const pinName = getPinNameOrGeneral(r.pinballId);
                 const pinShort = getPinShort(r.pinballId);
-                const snippet = r.text.length > 85 ? r.text.substring(0, 85) + '...' : r.text;
+                const snippet = r.text.length > 80 ? r.text.substring(0, 80) + '...' : r.text;
                 return `
-                    <div class="searchable-combo-item" onclick="selectDefectInModal(${r.id})">
-                        <strong style="color:var(--gold-light);">[${escHtml(pinShort)}] ${escHtml(pinName)}</strong>
-                        <span style="color:var(--text-muted);">(#${r.id})</span><br>
-                        <span>${escHtml(snippet)}</span>
+                    <div class="searchable-combo-row">
+                        <div style="flex:1; min-width:0;">
+                            <strong style="color:var(--gold-light);">[${escHtml(pinShort)}] ${escHtml(pinName)}</strong>
+                            <span style="color:var(--text-muted);">(#${r.id})</span><br>
+                            <span style="color:var(--text-main);">${escHtml(snippet)}</span>
+                        </div>
+                        <button type="button" class="btn-yellow" style="padding:5px 10px; font-size:12px; flex-shrink:0;" onclick="selectDefectInModal(${r.id})">Wählen</button>
                     </div>
                 `;
             }).join('');
@@ -935,9 +998,9 @@
             const rep = reportsDB.find(r => r.id === selectedDefectId);
             manualWrap.classList.add('hidden');
             box.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; background:rgba(212,175,55,0.12); border:1px solid var(--gold-mid); border-radius:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; background:rgba(212,175,55,0.14); border:1px solid var(--gold-mid); border-radius:6px;">
                     <div>
-                        <strong style="color:var(--gold-light);">Verknüpfter Defekt #${rep.id} (${escHtml(getPinNameOrGeneral(rep.pinballId))}):</strong><br>
+                        <strong style="color:var(--gold-light);">Defekt #${rep.id} (${escHtml(getPinNameOrGeneral(rep.pinballId))}):</strong><br>
                         <span style="color:var(--text-main);">${escHtml(rep.text.substring(0, 120))}</span>
                     </div>
                     <button type="button" class="btn-switch" style="padding:4px 9px;" onclick="clearSelectedDefect()">✕</button>
@@ -945,10 +1008,73 @@
             `;
         }
 
+        // Teile-Auswahl + Mini-Button für Tag-Suche
+        function toggleReqTagMode() {
+            reqTagSearchMode = !reqTagSearchMode;
+            const btn = document.getElementById('req-tag-mode-btn');
+            const picker = document.getElementById('req-tag-picker-box');
+            const input = document.getElementById('req-part-search');
+
+            btn.classList.toggle('tag-mode-on', reqTagSearchMode);
+            picker.classList.toggle('hidden', !reqTagSearchMode);
+
+            if (reqTagSearchMode) {
+                input.placeholder = 'Nach Tag-Namen suchen (oder unten anklicken)...';
+                renderReqTagPickerChips();
+                openPartCombo();
+            } else {
+                input.placeholder = 'Teil suchen nach Name, Nummer oder Shop...';
+                renderPartComboList();
+            }
+        }
+
+        function toggleReqSearchTag(tagName) {
+            if (reqSelectedSearchTags.has(tagName)) reqSelectedSearchTags.delete(tagName);
+            else reqSelectedSearchTags.add(tagName);
+            renderReqTagPickerChips();
+            openPartCombo();
+        }
+
+        function clearReqSearchTags() {
+            reqSelectedSearchTags.clear();
+            renderReqTagPickerChips();
+            renderPartComboList();
+        }
+
+        function renderReqTagPickerChips() {
+            const box = document.getElementById('req-tag-picker-chips');
+            const q = reqTagSearchMode ? (document.getElementById('req-part-search').value || '').trim().toLowerCase() : '';
+            const allTags = getAllUniqueTagNames().filter(t => !q || t.toLowerCase().includes(q) || reqSelectedSearchTags.has(t));
+
+            document.getElementById('req-clear-tags-btn').classList.toggle('hidden', reqSelectedSearchTags.size === 0);
+
+            if (allTags.length === 0) {
+                box.innerHTML = '<span style="font-size:12px; color:var(--text-muted);">Keine passenden Tags gefunden.</span>';
+                return;
+            }
+
+            box.innerHTML = allTags.map(t => {
+                const active = reqSelectedSearchTags.has(t);
+                const safeArg = escJsArg(t);
+                return `<span class="tag-chip ${active ? 'tag-active' : ''}" onclick="toggleReqSearchTag('${safeArg}')">${active ? '✓ ' : '# '}${escHtml(t)}</span>`;
+            }).join('');
+        }
+
+        function onReqPartSearchInput() {
+            if (reqTagSearchMode) renderReqTagPickerChips();
+            openPartCombo();
+        }
+
         function openPartCombo() {
             document.getElementById('req-defect-dropdown').classList.add('hidden');
             renderPartComboList();
             document.getElementById('req-part-dropdown').classList.remove('hidden');
+            document.getElementById('req-close-part-list-btn').classList.remove('hidden');
+        }
+
+        function closePartCombo() {
+            document.getElementById('req-part-dropdown').classList.add('hidden');
+            document.getElementById('req-close-part-list-btn').classList.add('hidden');
         }
 
         function renderPartComboList() {
@@ -956,58 +1082,75 @@
             const q = (document.getElementById('req-part-search').value || '').trim().toLowerCase();
 
             const matches = partsCatalogDB.filter(c => {
+                // Alle ausgewählten Tags müssen am Teil vorhanden sein
+                for (const reqTag of reqSelectedSearchTags) {
+                    if (!(c.tags || []).includes(reqTag)) return false;
+                }
                 if (!q) return true;
+                if (reqTagSearchMode) {
+                    // Im Tag-Modus filtert Text entweder auf Tags oder auf Teilenamen
+                    const hay = [(c.tags || []).join(' '), c.partName, c.partNumber].join(' ').toLowerCase();
+                    return hay.includes(q);
+                }
                 const hay = [c.partName, c.partNumber, c.shopName, c.notes, (c.tags || []).join(' ')].join(' ').toLowerCase();
                 return hay.includes(q);
-            }).slice(0, 30);
+            }).slice(0, 60);
 
             if (matches.length === 0) {
-                box.innerHTML = '<div class="searchable-combo-item" style="color:var(--text-muted);">Kein registriertes Teil gefunden.</div>';
+                box.innerHTML = '<div class="searchable-combo-row" style="color:var(--text-muted);">Keine passenden registrierten Teile gefunden.</div>';
                 return;
             }
 
             box.innerHTML = matches.map(c => {
+                const inCart = selectedRequestParts.find(x => x.partId === c.id);
                 const tagsStr = (c.tags || []).map(t => `#${t}`).join(' ');
+                const btnLabel = inCart ? `+1 (${inCart.quantity}×)` : '+ Hinzufügen';
+                const btnClass = inCart ? 'btn-yellow' : 'btn-green';
+
                 return `
-                    <div class="searchable-combo-item" onclick="addPartToRequestList(${c.id})">
-                        <div style="display:flex; justify-content:space-between; gap:8px;">
+                    <div class="searchable-combo-row">
+                        <div style="flex:1; min-width:0;">
                             <strong style="color:var(--gold-light);">${escHtml(c.partName)}</strong>
-                            <span style="font-size:12px; color:var(--text-muted);">Bestand: ${c.stockQty}</span>
+                            <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">(Lager: ${c.stockQty})</span>
+                            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">
+                                ${c.partNumber ? `Art.-Nr.: ${escHtml(c.partNumber)} • ` : ''}
+                                ${c.shopName ? `Shop: ${escHtml(c.shopName)}` : 'Ohne Shop'}
+                                ${c.price !== null ? ` • ${formatEuro(c.price)}` : ''}
+                                ${tagsStr ? `<br><span style="color:#79c0ff;">${escHtml(tagsStr)}</span>` : ''}
+                            </div>
                         </div>
-                        <div style="font-size:12px; color:var(--text-muted);">
-                            ${c.partNumber ? `Art.-Nr.: ${escHtml(c.partNumber)} • ` : ''}
-                            ${c.shopName ? `Shop: ${escHtml(c.shopName)}` : 'Ohne Shop'}
-                            ${c.price !== null ? ` • ${formatEuro(c.price)}` : ''}
-                            ${tagsStr ? ` • ${escHtml(tagsStr)}` : ''}
-                        </div>
+                        <button type="button" class="${btnClass}" style="padding:6px 11px; font-size:12px; flex-shrink:0;" onclick="addPartToRequestList(${c.id}, true)">${btnLabel}</button>
                     </div>
                 `;
             }).join('');
         }
 
-        function addPartToRequestList(partId) {
+        function addPartToRequestList(partId, keepOpen = true) {
             const existing = selectedRequestParts.find(x => x.partId === partId);
             if (existing) existing.quantity += 1;
             else selectedRequestParts.push({ partId, quantity: 1 });
-            document.getElementById('req-part-search').value = '';
-            document.getElementById('req-part-dropdown').classList.add('hidden');
             renderSelectedRequestParts();
+            if (keepOpen) renderPartComboList();
         }
 
         function updateRequestPartQty(partId, val) {
             const item = selectedRequestParts.find(x => x.partId === partId);
             if (item) item.quantity = Math.max(1, parseInt(val, 10) || 1);
+            renderPartComboList();
         }
 
         function removeRequestPart(partId) {
             selectedRequestParts = selectedRequestParts.filter(x => x.partId !== partId);
             renderSelectedRequestParts();
+            renderPartComboList();
         }
 
         function renderSelectedRequestParts() {
             const box = document.getElementById('req-selected-parts-list');
+            document.getElementById('req-cart-count').innerText = selectedRequestParts.length;
+
             if (selectedRequestParts.length === 0) {
-                box.innerHTML = '<div style="font-size:13px; color:var(--text-muted); padding:8px 0;"><i>Noch keine Teile ausgewählt. Suche oben im Feld nach registrierten Teilen und klicke sie an.</i></div>';
+                box.innerHTML = '<div style="font-size:13px; color:var(--text-muted); padding:6px 0;"><i>Noch keine Teile im Warenkorb. Nutze oben die Suche oder „# Tags“ und klicke bei den gewünschten Teilen auf „+ Hinzufügen“.</i></div>';
                 return;
             }
 
@@ -1015,8 +1158,8 @@
                 const c = getCatalogPart(item.partId);
                 if (!c) return '';
                 return `
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 10px; background:var(--surface-elevated); border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:6px;">
-                        <div style="flex:1;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 10px; background:var(--surface-card); border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:7px;">
+                        <div style="flex:1; min-width:0;">
                             <strong style="color:var(--text-main);">${escHtml(c.partName)}</strong>
                             <div style="font-size:12px; color:var(--text-muted);">${escHtml(c.shopName || 'Ohne Shop')}${c.price !== null ? ` • ${formatEuro(c.price)}` : ''}</div>
                         </div>
@@ -1317,18 +1460,11 @@
             }
         }
 
-        // Dropdowns schließen, wenn außerhalb geklickt wird
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.searchable-combo')) {
-                document.getElementById('req-defect-dropdown')?.classList.add('hidden');
-                document.getElementById('req-part-dropdown')?.classList.add('hidden');
-            }
-        });
-
         window.addEventListener('DOMContentLoaded', async () => {
             const params = new URLSearchParams(window.location.search);
 
             await initSharedApp(() => {
+                if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
                 if (!hasPerm('request_parts') && !hasPerm('manage_parts') && !hasPerm('view_reports')) {
                     window.location.href = './';
                     return;
@@ -1336,23 +1472,16 @@
                 renderPartsView();
             });
 
-            if (!isLoggedIn) {
-                redirectToLoginWithReturn();
-                return;
-            }
+            if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
             if (!hasPerm('request_parts') && !hasPerm('manage_parts') && !hasPerm('view_reports')) {
                 showActionToast("Keine Berechtigung für Ersatzteile & Inventar.", "error");
                 window.location.href = './';
                 return;
             }
-            if (!isTechMode && hasAnyAdminAreaAccess()) {
-                isTechMode = true; localStorage.setItem('pinplay_tech_mode', 'true'); renderSharedHeader();
-            }
 
             populatePartsPinFilter();
             renderPartsView();
 
-            // Direkter QR-Code-Scan (?part=ID)
             const qrPartParam = params.get('part') || params.get('qr');
             if (qrPartParam) {
                 switchPartsTab('inventar');
@@ -1360,7 +1489,6 @@
                 return;
             }
 
-            // Direkter Absprung aus einer Defektmeldung (?add=1&pin=...&report=...)
             if (params.get('add') === '1' && hasPerm('request_parts')) {
                 openRequestModal(params.get('report'), null, params.get('pin'));
                 window.history.replaceState({}, '', 'tech-parts');

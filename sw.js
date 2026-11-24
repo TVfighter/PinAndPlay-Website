@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pinplay-static-v20';
+const CACHE_NAME = 'pinplay-static-v21';
 const STATIC_ASSETS = [
     'logo.png',
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',

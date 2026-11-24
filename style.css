@@ -1664,3 +1664,181 @@ body.tv-display-mode {
         overflow-y: auto;
     }
 }
+/* ==========================================================================
+ *  BUGFIX-RUNDE: WACKELFREIE SLIDER, KOMPAKTE RECHTE, TAG-DELETE & TEILE-POPUP
+ *  ========================================================================== */
+
+/* 1. Slider-Wackeln auf tech-accounts.html komplett eliminieren */
+.perm-slider-card {
+    padding: 12px 14px;
+    margin-bottom: 12px;
+}
+.perm-slider-header {
+    min-height: 26px;
+}
+.perm-slider-badge {
+    min-width: 175px;
+    text-align: center;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+.perm-slider-step {
+    border: 1px solid transparent !important;
+    box-sizing: border-box;
+    font-weight: 600 !important;
+    min-height: 36px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    line-height: 1.25;
+}
+.perm-slider-step.step-active {
+    border-color: var(--gold-border) !important;
+    font-weight: 600 !important;
+    color: var(--gold-light);
+    background: rgba(212, 175, 55, 0.16);
+}
+
+/* 2. Kompaktere Rechte-Knöpfe auf tech-accounts.html */
+.perm-grid-compact {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 7px;
+    margin-bottom: 14px;
+}
+.perm-checkbox-compact {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    padding: 7px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.25;
+    transition: border-color 0.15s;
+}
+.perm-checkbox-compact:hover {
+    border-color: var(--gold-mid);
+}
+.perm-checkbox-compact input[type="checkbox"] {
+    width: 16px !important;
+    height: 16px !important;
+    margin: 0 !important;
+    flex-shrink: 0;
+    accent-color: var(--gold-mid);
+}
+.perm-checkbox-compact small {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+/* 3. Lösch-Button auf Tag-Chips */
+.tag-delete-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    margin-left: 3px;
+    background: rgba(207, 52, 50, 0.25);
+    color: #ff7b72;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.tag-delete-x:hover {
+    background: var(--status-red);
+    color: #fff;
+}
+
+/* 4. Farblich getrennte Sektionen & mehr Abstand im Teile-anfordern-Popup */
+.req-section-defect {
+    background: rgba(212, 175, 55, 0.06);
+    border: 1px solid var(--gold-border);
+    border-left: 4px solid var(--gold-mid);
+    border-radius: 7px;
+    padding: 14px;
+    margin-bottom: 18px;
+}
+.req-section-parts {
+    background: rgba(56, 139, 253, 0.06);
+    border: 1px solid rgba(56, 139, 253, 0.35);
+    border-left: 4px solid var(--primary-blue);
+    border-radius: 7px;
+    padding: 14px;
+    margin-bottom: 18px;
+}
+.req-section-title {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 10px 0;
+}
+.req-cart-divider {
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--border-light);
+}
+
+/* 5. Suchfeld mit seitlichem Mini-Tag-Button + Mobile-sicheres Scroll-Dropdown */
+.search-with-mini-btn {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.search-with-mini-btn input {
+    flex: 1;
+    margin: 0 !important;
+}
+.btn-mini-tag-toggle {
+    padding: 0 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border-light);
+    background: var(--surface-elevated);
+    color: var(--text-main);
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+.btn-mini-tag-toggle:hover {
+    border-color: var(--gold-mid);
+    color: var(--gold-light);
+}
+.btn-mini-tag-toggle.tag-mode-on {
+    background: var(--accent-yellow);
+    color: #111;
+    border-color: var(--gold-light);
+}
+
+.searchable-combo-list {
+    max-height: 260px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+}
+.searchable-combo-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 13px;
+    line-height: 1.35;
+}
+.searchable-combo-row:last-child { border-bottom: none; }
+.searchable-combo-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+}

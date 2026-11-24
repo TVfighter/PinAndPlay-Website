@@ -13,7 +13,7 @@
     <div id="view-highscores" class="container">
         <div class="detail-header">
             <div class="detail-header-left">
-                <button class="btn-back" onclick="navigateBackTo(isTechMode ? 'techniker' : './')" title="Zurück zur Übersicht">←</button>
+                <button class="btn-back" onclick="navigateBackTo('./')" title="Zurück zur Übersicht">←</button>
                 <h2 style="margin: 0;">Pin&amp;Play Highscores</h2>
             </div>
             <div class="detail-header-actions">
@@ -148,6 +148,7 @@
             const allTbody = document.getElementById('hs-all-machines-tbody');
             const selectEl = document.getElementById('leaderboard-pinball-select');
             const currentSelected = selectedPinId || Number(selectEl.value) || null;
+            const canVerifyHs = hasPerm('verify_highscores');
 
             allTbody.innerHTML = '';
             selectEl.innerHTML = '';
@@ -159,12 +160,12 @@
 
             orderedPins.forEach(p => {
                 const unverifiedHsCount = highscoresDB.filter(h => h.pinballId === p.id && !h.verifiziert).length;
-                const hasUnverifiedForTech = isTechMode && hasPerm('verify_highscores') && unverifiedHsCount > 0;
+                const hasUnverifiedForStaff = canVerifyHs && unverifiedHsCount > 0;
 
                 const opt = document.createElement('option');
                 opt.value = p.id;
                 let optLabel = p.isAktiv ? p.name : `${p.name} (Außer Betrieb)`;
-                if (hasUnverifiedForTech) {
+                if (hasUnverifiedForStaff) {
                     optLabel += ` — ${unverifiedHsCount} unverifiziert`;
                 }
                 opt.textContent = optLabel;
@@ -179,19 +180,16 @@
                 const holderText = topEntry ? `<strong style="color:var(--gold-light);">${holderDisplay}</strong>` : '<span style="color:var(--text-muted);">-</span>';
                 const scoreText = topEntry ? `<strong>${formatScore(topEntry.score)}</strong>` : '<span style="color:var(--text-muted);">Noch kein Rekord</span>';
 
-                const actionAddHtml = (isTechMode || p.isAktiv)
+                const actionAddHtml = (canVerifyHs || p.isAktiv)
                     ? `<button class="btn-add-score" onclick="openHighscoreSubmit(${p.id}, 'highscores')" title="Highscore für ${p.name} eintragen">+</button>`
                     : `<span class="badge-inactive-icon" title="${p.name} ist derzeit außer Betrieb (Keine Highscore-Eintragung möglich)">!</span>`;
 
-                const techUnverifBadgeHtml = hasUnverifiedForTech
-                    ? `<span class="badge-unverified-hs" onclick="openDetailFromHighscores('tech-detail?id=${p.id}&tab=highscore&from=highscores')" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} im Techniker-Menü zu prüfen">${unverifiedHsCount} unverifiziert</span>`
+                const techUnverifBadgeHtml = hasUnverifiedForStaff
+                    ? `<span class="badge-unverified-hs" onclick="openDetailFromHighscores('tech-detail?id=${p.id}&tab=highscore&from=highscores')" title="Klicken, um die ${unverifiedHsCount} unverifizierten Highscore-Einträge für ${p.name} zu prüfen">${unverifiedHsCount} unverifiziert</span>`
                     : '';
 
-                const detailTargetUrl = isTechMode
-                    ? `tech-detail?id=${p.id}&from=highscores`
-                    : `detail?id=${p.id}&from=highscores`;
-
-                const rowClass = hasUnverifiedForTech ? 'unverified-hs-row' : '';
+                const detailTargetUrl = `detail?id=${p.id}&from=highscores`;
+                const rowClass = hasUnverifiedForStaff ? 'unverified-hs-row' : '';
 
                 allTbody.innerHTML += `
                     <tr class="${rowClass}">
@@ -228,7 +226,7 @@
             singleTbody.innerHTML = '';
 
             const singleWarnBadge = document.getElementById('hs-single-inactive-badge');
-            if (selectedPin && !selectedPin.isAktiv && !isTechMode) {
+            if (selectedPin && !selectedPin.isAktiv && !hasPerm('verify_highscores')) {
                 singleWarnBadge.classList.remove('hidden');
             } else {
                 singleWarnBadge.classList.add('hidden');
@@ -268,7 +266,7 @@
         function openHighscoreSubmitFromLeaderboardHeader() {
             const selectedId = Number(document.getElementById('leaderboard-pinball-select').value);
             const selectedPin = pinballs.find(p => p.id === selectedId);
-            if (!isTechMode && selectedPin && !selectedPin.isAktiv) {
+            if (!hasPerm('verify_highscores') && selectedPin && !selectedPin.isAktiv) {
                 openHighscoreSubmit(null, 'highscores');
             } else {
                 openHighscoreSubmit(selectedId, 'highscores');
@@ -291,14 +289,15 @@
                 saveCurrentScrollPos();
             }
 
+            const canSubmitInactive = hasPerm('verify_highscores');
             const requestedPin = preselectedPinballId ? pinballs.find(p => p.id === Number(preselectedPinballId)) : null;
 
-            if (!isTechMode && preselectedPinballId && requestedPin && !requestedPin.isAktiv) {
+            if (!canSubmitInactive && preselectedPinballId && requestedPin && !requestedPin.isAktiv) {
                 showActionToast("Dieser Flipper ist derzeit außer Betrieb (Wartung). Highscores können aktuell nicht eingetragen werden.", "error");
                 return;
             }
 
-            const selectablePins = isTechMode ? pinballs : pinballs.filter(p => p.isAktiv);
+            const selectablePins = canSubmitInactive ? pinballs : pinballs.filter(p => p.isAktiv);
             if (selectablePins.length === 0) {
                 showActionToast("Derzeit sind keine aktiven Flipper für Highscore-Eintragungen verfügbar.", "error");
                 return;
@@ -423,8 +422,9 @@
 
             const matchedProfile = resolvePlayerProfile(rawTyped);
             const storedPinForProfile = matchedProfile ? localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`) : null;
+            const canBypassPin = hasPerm('verify_highscores');
 
-            if (matchedProfile && matchedProfile.hasPin === true && !isTechMode) {
+            if (matchedProfile && matchedProfile.hasPin === true && !canBypassPin) {
                 if (storedPinForProfile) {
                     pinInput.value = storedPinForProfile;
                     pinBox.classList.add('hidden');
@@ -468,7 +468,6 @@
         }
 
         async function submitHighscore() {
-            // 1. Sofortige Sperre gegen doppeltes / mehrfaches Absenden
             if (isSubmittingHighscore) return;
             if (!ensureWritePermission()) return;
 
@@ -476,7 +475,8 @@
             const pin = pinballs.find(p => p.id === pinId);
             if (!pin) return;
 
-            if (!isTechMode && !pin.isAktiv) {
+            const canVerifyHs = hasPerm('verify_highscores');
+            if (!canVerifyHs && !pin.isAktiv) {
                 showActionToast("Sicherheitssperre: Für einen inaktiven Flipper können keine Highscores eingetragen werden!", "error");
                 return;
             }
@@ -501,10 +501,8 @@
                 return;
             }
 
-            // 2. Beweisfoto ist bei ALLEN Highscores zwingend Pflicht
             const autoVerifyHs = hasPerm('auto_verify_highscores');
 
-            // Beweisfoto ist für alle Accounts ohne Auto-Verifizierung Pflicht
             if (!autoVerifyHs && !file) {
                 photoBox.classList.remove('photo-selected-ok');
                 photoBox.classList.add('photo-missing-error');
@@ -516,7 +514,6 @@
                 return;
             }
 
-            // 3. Verhindern, dass exakt derselbe Score doppelt eingereicht wird
             if (pin.hsMaxLength === 0) {
                 const duplicateExactScore = highscoresDB.some(h => h.pinballId === pinId && h.score === scoreVal);
                 if (duplicateExactScore) {
@@ -544,13 +541,12 @@
                 }
             }
 
-            // Ab hier: Request-Sperre sofort aktivieren (noch vor jedem await!)
             isSubmittingHighscore = true;
             submitBtn.disabled = true;
             submitBtn.classList.add('btn-busy');
 
             try {
-                if (matchedProfile && matchedProfile.hasPin === true && !isTechMode) {
+                if (matchedProfile && matchedProfile.hasPin === true && !canVerifyHs) {
                     const savedPin = localStorage.getItem(`pinplay_player_pin_${matchedProfile.id}`);
                     const enteredPin = document.getElementById('hs-player-pin').value.trim();
                     const activePin = savedPin || enteredPin;
@@ -583,36 +579,34 @@
                     localStorage.setItem(`pinplay_player_pin_${matchedProfile.id}`, activePin);
                 }
 
-
                 submitBtn.innerText = (!autoVerifyHs && file) ? "⏳ Komprimiere Beweisfoto & sende..." : "⏳ Sende Highscore...";
-            statusEl.style.display = 'block';
-            statusEl.style.color = 'var(--gold-light)';
-            statusEl.innerText = autoVerifyHs ? "Highscore wird direkt verifiziert gespeichert..." : "Beweisfoto wird komprimiert und Highscore übertragen...";
+                statusEl.style.display = 'block';
+                statusEl.style.color = 'var(--gold-light)';
+                statusEl.innerText = autoVerifyHs ? "Highscore wird direkt verifiziert gespeichert..." : "Beweisfoto wird komprimiert und Highscore übertragen...";
 
-            // Bei Auto-Verifizierung kein unnötiges Beweisfoto im Storage ablegen
-            const uploadedFilePath = autoVerifyHs ? '' : await uploadIncomingPhoto('highscore', file);
+                const uploadedFilePath = autoVerifyHs ? '' : await uploadIncomingPhoto('highscore', file);
 
-            const { data: insertedRows, error } = await db.from('highscore').insert([{
-                flipper_id: pinId,
-                initials: initials,
-                score: scoreVal,
-                verifiziert: autoVerifyHs,
-                beweisfoto: uploadedFilePath
-            }]).select();
+                const { data: insertedRows, error } = await db.from('highscore').insert([{
+                    flipper_id: pinId,
+                    initials: initials,
+                    score: scoreVal,
+                    verifiziert: autoVerifyHs,
+                    beweisfoto: uploadedFilePath
+                }]).select();
 
-            if (error) throw error;
+                if (error) throw error;
 
-            if (autoVerifyHs && insertedRows && insertedRows.length > 0) {
-                await removeOldLowerPlayerScores(pinId, initials, insertedRows[0].id, scoreVal);
-            }
+                if (autoVerifyHs && insertedRows && insertedRows.length > 0) {
+                    await removeOldLowerPlayerScores(pinId, initials, insertedRows[0].id, scoreVal);
+                }
 
-            submitBtn.classList.remove('btn-busy');
-            submitBtn.innerText = autoVerifyHs ? "✓ Highscore direkt verifiziert!" : "✓ Highscore eingereicht!";
-            statusEl.style.color = '#3fb950';
-            statusEl.innerText = autoVerifyHs
-                ? "✓ Highscore direkt verifiziert in die Rangliste eingetragen!"
-                : "✓ Highscore mit Beweisfoto eingereicht! Er wird nach Prüfung freigeschaltet.";
-            showActionToast(statusEl.innerText, "success");
+                submitBtn.classList.remove('btn-busy');
+                submitBtn.innerText = autoVerifyHs ? "✓ Highscore direkt verifiziert!" : "✓ Highscore eingereicht!";
+                statusEl.style.color = '#3fb950';
+                statusEl.innerText = autoVerifyHs
+                    ? "✓ Highscore direkt verifiziert in die Rangliste eingetragen!"
+                    : "✓ Highscore mit Beweisfoto eingereicht! Er wird nach Prüfung freigeschaltet.";
+                showActionToast(statusEl.innerText, "success");
 
                 document.getElementById('hs-score').value = '';
                 fileInput.value = '';

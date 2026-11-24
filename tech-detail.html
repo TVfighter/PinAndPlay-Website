@@ -272,14 +272,12 @@
             if (navOriginDetail === 'highscores') {
                 const idParam = currentPinball ? `?id=${currentPinball.id}` : '';
                 navigateBackTo(`highscores${idParam}`);
-            } else if (navOriginDetail === 'tech-feed') {
-                navigateBackTo('tech-feed');
             } else if (navOriginDetail === 'tech-parts') {
                 navigateBackTo('tech-parts');
             } else if (navOriginDetail === 'index') {
                 navigateBackTo('./');
             } else {
-                navigateBackTo('techniker');
+                navigateBackTo('tech-feed?tab=dashboard');
             }
         }
 
@@ -1015,13 +1013,9 @@
             editingReportId = null;
         }
 
-        function handleModalBackdropClick(event, modalId) {
-            if (event.target.id === modalId) {
-                if (modalId === 'tech-report-modal') closeTechReportModal();
-                if (modalId === 'tech-resolve-modal') closeResolveModal();
-                if (modalId === 'tech-merge-modal') closeMergeReportModal();
-                if (modalId === 'tech-verify-hs-modal') closeVerifyHighscoreModal();
-            }
+        // Popups sollen beim Klick neben das Fenster NICHT mehr schließen
+        function handleModalBackdropClick() {
+            return;
         }
 
         async function saveTechReportModal() {
@@ -1181,14 +1175,14 @@
             renderCurrentTechTabContent();
         }
 
-        window.addEventListener('DOMContentLoaded', async () => {
+       window.addEventListener('DOMContentLoaded', async () => {
             const params = new URLSearchParams(window.location.search);
             const pinId = Number(params.get('id'));
             const initialTab = params.get('tab') || 'offen';
 
             await initSharedApp(() => {
                 if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
-                if (!hasAnyAdminAreaAccess()) { window.location.href = `detail?id=${pinId}`; return; }
+                if (!hasAnyTechCenterAccess()) { window.location.href = `detail?id=${pinId}`; return; }
                 currentPinball = pinballs.find(p => p.id === pinId);
                 if (currentPinball) {
                     renderTechDetailHeaderAndInfo();
@@ -1200,19 +1194,14 @@
                 redirectToLoginWithReturn();
                 return;
             }
-            if (!hasAnyAdminAreaAccess()) {
+            if (!hasAnyTechCenterAccess()) {
                 window.location.href = `detail?id=${pinId}`;
                 return;
-            }
-            if (!isTechMode) {
-                isTechMode = true;
-                localStorage.setItem('pinplay_tech_mode', 'true');
-                renderSharedHeader();
             }
 
             currentPinball = pinballs.find(p => p.id === pinId);
             if (!currentPinball) {
-                window.location.href = 'techniker';
+                window.location.href = 'tech-feed?tab=dashboard';
                 return;
             }
 

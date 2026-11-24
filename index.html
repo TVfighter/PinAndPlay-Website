@@ -55,7 +55,7 @@
             const grid = document.getElementById('user-grid');
             const fbBtn = document.getElementById('user-overview-feedback-btn');
             if (fbBtn) {
-                fbBtn.style.display = isTechMode ? 'none' : 'inline-block';
+                fbBtn.style.display = 'inline-block';
             }
 
             grid.innerHTML = '';
@@ -69,7 +69,7 @@
                 const aktivLabel = p.isAktiv ? '' : '<br><span style="color: var(--gold-mid); font-size: 13px; font-weight: normal;">(Derzeit nicht in Aufstellung)</span>';
                 const cardStyle = p.isAktiv ? '' : 'opacity: 0.45; filter: grayscale(65%);';
                 const imgHtml = p.imgUrl ? `<img src="${p.imgUrl}" alt="${p.name}" loading="lazy">` : '';
-                const targetUrl = isTechMode ? `tech-detail?id=${p.id}&from=index` : `detail?id=${p.id}&from=index`;
+                const targetUrl = `detail?id=${p.id}&from=index`;
 
                 grid.innerHTML += `
                     <div class="flipper-card" onclick="openFlipperCard('${targetUrl}')" style="${cardStyle}">

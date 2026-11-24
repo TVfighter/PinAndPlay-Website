@@ -97,33 +97,27 @@
                 else inactiveBadge.classList.add('hidden');
             }
 
-            if (isTechMode && hasPerm('power_off')) {
+            if (hasPerm('power_off')) {
                 stylePowerButton(pwrBtn, currentPinball.power);
-                reportBtn.style.display = 'inline-block';
-                addScoreBtn.style.display = 'inline-flex';
+            } else if (!currentPinball.isAktiv) {
+                pwrBtn.style.display = 'none';
             } else {
-                if (!currentPinball.isAktiv) {
-                    pwrBtn.style.display = 'none';
-                    reportBtn.style.display = 'none';
-                    addScoreBtn.style.display = 'none';
+                pwrBtn.classList.remove('btn-busy');
+                if (currentPinball.power === 'OFF') {
+                    pwrBtn.disabled = false;
+                    pwrBtn.style.display = 'inline-block';
+                    pwrBtn.innerText = "Gerät anschalten";
+                    pwrBtn.style.backgroundColor = 'var(--status-green)';
+                    pwrBtn.style.color = 'white';
+                    pwrBtn.style.borderColor = '#3fb950';
+                    pwrBtn.style.cursor = 'pointer';
                 } else {
-                    reportBtn.style.display = 'inline-block';
-                    addScoreBtn.style.display = 'inline-flex';
-                    pwrBtn.classList.remove('btn-busy');
-
-                    if (currentPinball.power === 'OFF') {
-                        pwrBtn.disabled = false;
-                        pwrBtn.style.display = 'inline-block';
-                        pwrBtn.innerText = "Gerät anschalten";
-                        pwrBtn.style.backgroundColor = 'var(--status-green)';
-                        pwrBtn.style.color = 'white';
-                        pwrBtn.style.borderColor = '#3fb950';
-                        pwrBtn.style.cursor = 'pointer';
-                    } else {
-                        pwrBtn.style.display = 'none';
-                    }
+                    pwrBtn.style.display = 'none';
                 }
             }
+
+            reportBtn.style.display = (currentPinball.isAktiv || hasPerm('manage_reports')) ? 'inline-block' : 'none';
+            addScoreBtn.style.display = (currentPinball.isAktiv || hasPerm('verify_highscores')) ? 'inline-flex' : 'none';
         }
 
         function goToHighscoreSubmit() {
@@ -136,7 +130,7 @@
         function openUserReportView() {
             if (!currentPinball) return;
             if (!ensureWritePermission()) return;
-            if (!isTechMode && !currentPinball.isAktiv) {
+            if (!hasPerm('manage_reports') && !currentPinball.isAktiv) {
                 showActionToast("Dieser Flipper befindet sich derzeit in Wartung (Inaktiv) und kann nicht gemeldet werden.", "error");
                 return;
             }
@@ -165,7 +159,7 @@
             if (isSubmittingReport) return;
             if (!currentPinball) return;
             if (!ensureWritePermission()) return;
-            if (!isTechMode && !currentPinball.isAktiv) {
+            if (!hasPerm('manage_reports') && !currentPinball.isAktiv) {
                 showActionToast("Sicherheitssperre: Inaktive Flipper können nicht gemeldet werden.", "error");
                 return;
             }
@@ -192,8 +186,8 @@
 
             try {
                 const uploadedFilePath = await uploadIncomingPhoto('reports', fileInput.files[0]);
+                const autoVerifyRep = hasPerm('auto_verify_reports');
 
-               const autoVerifyRep = hasPerm('auto_verify_reports');
                 const { error } = await db.from('reports').insert([{
                     flipper_id: currentPinball.id,
                     meldung: desc,
