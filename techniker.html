@@ -90,8 +90,13 @@
 
         function renderTechTableBody() {
             const canPwrOff = hasPerm('power_off');
-            document.getElementById('bulk-pwr-on-btn').style.display = canPwrOff ? 'inline-block' : 'none';
-            document.getElementById('bulk-pwr-off-btn').style.display = canPwrOff ? 'inline-block' : 'none';
+            const canViewRep = hasPerm('view_reports');
+
+            const bulkOnBtn = document.getElementById('bulk-pwr-on-btn');
+            const bulkOffBtn = document.getElementById('bulk-pwr-off-btn');
+            if (bulkOnBtn) bulkOnBtn.style.display = canPwrOff ? 'inline-block' : 'none';
+            if (bulkOffBtn) bulkOffBtn.style.display = canPwrOff ? 'inline-block' : 'none';
+
             const tbody = document.getElementById('tech-table-body');
             if (!tbody) return;
 
@@ -112,39 +117,48 @@
                 return techTableSortAsc ? cmp : -cmp;
             });
 
-            const pwrDisabled = (!canPwrOff && p.power === 'ON') ? 'disabled style="opacity:0.6; cursor:not-allowed; font-weight: bold; color: #3fb950;"' : `style="font-weight: bold; color: ${pwrColor};"`;
-            const reportsCellHtml = hasPerm('view_reports') ? getReportCountsHtml(p.id) : '<span style="color:var(--text-muted);">-</span>';
+            tbody.innerHTML = '';
+            sortedPinballs.forEach(p => {
+                const statusColorClass = p.isAktiv ? 'status-box-green' : 'status-box-orange';
+                const statusTooltip = p.isAktiv ? 'Spielbereit (Aktiv)' : 'Wartung (Inaktiv)';
+                const pwrColor = p.power === 'ON' ? '#3fb950' : '#ff7b72';
+                const pwrDisabled = !canPwrOff && (p.power === 'ON' || !p.isAktiv);
+                const pwrBtnAttrs = pwrDisabled
+                    ? `disabled style="opacity:0.55; cursor:not-allowed; font-weight: bold; color: ${pwrColor};"`
+                    : `style="font-weight: bold; color: ${pwrColor};"`;
+                const reportsCellHtml = canViewRep
+                    ? getReportCountsHtml(p.id)
+                    : '<span style="color:var(--text-muted);">-</span>';
 
-            tbody.innerHTML += `
-                <tr>
-                    <td><strong style="color:var(--gold-light);">${p.short}</strong></td>
-                    <td><span class="clickable-name" onclick="openTechDetailFromTable(${p.id})">${p.name}</span></td>
-                    <td><span class="status-color-box ${statusColorClass}" title="${statusTooltip}"></span></td>
-                    <td>${reportsCellHtml}</td>
-                    <td>
-                        <button id="tech-table-pwr-btn-${p.id}" class="btn-switch" onclick="handleTablePowerClick(${p.id})" ${pwrDisabled}>
-                            ${p.power}
-                        </button>
-                    </td>
-                    <td><button class="btn-yellow">PDF öffnen</button></td>
-                </tr>
-            `;
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong style="color:var(--gold-light);">${p.short}</strong></td>
+                        <td><span class="clickable-name" onclick="openTechDetailFromTable(${p.id})">${p.name}</span></td>
+                        <td><span class="status-color-box ${statusColorClass}" title="${statusTooltip}"></span></td>
+                        <td>${reportsCellHtml}</td>
+                        <td>
+                            <button id="tech-table-pwr-btn-${p.id}" class="btn-switch" onclick="handleTablePowerClick(${p.id})" ${pwrBtnAttrs}>
+                                ${p.power}
+                            </button>
+                        </td>
+                        <td><button class="btn-yellow">PDF öffnen</button></td>
+                    </tr>
+                `;
             });
         }
 
         async function handleTablePowerClick(pinballId) {
             const btn = document.getElementById(`tech-table-pwr-btn-${pinballId}`);
-            await togglePinballPower(pinballId, btn, (updatedPin) => {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.classList.remove('btn-busy');
-                    btn.innerText = updatedPin.power;
-                    btn.style.color = updatedPin.power === 'ON' ? '#3fb950' : '#ff7b72';
-                }
+            await togglePinballPower(pinballId, btn, () => {
+                renderTechTableBody();
             });
         }
 
         async function setAllMachinesPower(turnOn) {
+            if (!hasPerm('power_off')) {
+                showActionToast("Keine Berechtigung zum globalen Schalten.", "error");
+                return;
+            }
             const targetPins = turnOn ? pinballs.filter(p => p.isAktiv) : pinballs;
             const targetIds = targetPins.map(p => p.id);
             if (targetIds.length === 0) return;
@@ -172,18 +186,19 @@
 
             targetPins.forEach(p => {
                 p.power = turnOn ? 'ON' : 'OFF';
-                const tableBtn = document.getElementById(`tech-table-pwr-btn-${p.id}`);
-                if (tableBtn) {
-                    tableBtn.innerText = p.power;
-                    tableBtn.style.color = turnOn ? '#3fb950' : '#ff7b72';
-                }
             });
             saveStateToCache();
+            renderTechTableBody();
             showActionToast(turnOn ? `✓ Alle ${targetPins.length} aktiven Flipper eingeschaltet (ON)!` : `✓ Alle Flipper ausgeschaltet (OFF)!`, "success");
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
-            await initSharedApp(() => renderTechTableBody());
+            await initSharedApp(() => {
+                if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
+                if (!hasAnyAdminAreaAccess()) { window.location.href = './'; return; }
+                renderTechTableBody();
+            });
+
             if (!isLoggedIn) { redirectToLoginWithReturn(); return; }
             if (!hasAnyAdminAreaAccess()) { window.location.href = './'; return; }
             if (!isTechMode) {

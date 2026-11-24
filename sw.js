@@ -1,7 +1,5 @@
-const CACHE_NAME = 'pinplay-static-v19';
+const CACHE_NAME = 'pinplay-static-v20';
 const STATIC_ASSETS = [
-    'style.css',
-    'app.js',
     'logo.png',
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
     'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
@@ -28,10 +26,10 @@ self.addEventListener('fetch', (event) => {
 
     const url = new URL(req.url);
 
-    // 1. Browser-Erweiterungen (z.B. chrome-extension://) sofort ignorieren
+    // 1. Browser-Erweiterungen ignorieren
     if (!url.protocol.startsWith('http')) return;
 
-    // 2. HTML-Seitenwechsel immer direkt über den Server laden (verhindert 'Site can't be reached')
+    // 2. HTML-Seitenwechsel immer direkt über den Server laden
     if (
         req.mode === 'navigate' ||
         req.destination === 'document' ||
@@ -40,27 +38,37 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // 3. Datenbank-Abfragen an Supabase niemals im Service Worker cachen
+    // 3. Live-Datenbankabfragen an Supabase niemals cachen
     if (url.hostname.includes('supabase.co') && !url.pathname.includes('/flipper-fotos/')) {
         return;
     }
 
-    // 4. Statische Dateien (CSS, JS, Logo, Flipper-Fotos) aus dem Cache liefern
+    const isLocalOrigin = url.origin === self.location.origin;
+
+    // 4. Lokale CSS- & JS-Dateien (style.css, app.js): IMMER Network-First (nie wieder altes Design!)
+    if (isLocalOrigin && (url.pathname.endsWith('.css') || url.pathname.endsWith('.js'))) {
+        event.respondWith(
+            fetch(req, { cache: 'no-cache' })
+                .then((networkResponse) => {
+                    if (networkResponse && networkResponse.status === 200) {
+                        caches.open(CACHE_NAME).then((cache) => cache.put(url.pathname, networkResponse.clone()));
+                    }
+                    return networkResponse;
+                })
+                .catch(() => caches.match(url.pathname))
+        );
+        return;
+    }
+
+    // 5. Bilder (Logo, Flipper-Fotos) & externe Bibliotheken: Schnell aus dem Cache
     event.respondWith(
         caches.open(CACHE_NAME).then(async (cache) => {
-            const isLocalAsset = url.origin === self.location.origin;
-
-            let cachedResponse = await cache.match(req, {
-                ignoreSearch: isLocalAsset
-            });
-
-            if (cachedResponse && cachedResponse.redirected) {
-                cachedResponse = null;
-            }
+            let cachedResponse = await cache.match(req, { ignoreSearch: isLocalOrigin });
+            if (cachedResponse && cachedResponse.redirected) cachedResponse = null;
 
             const networkFetch = fetch(req).then((networkResponse) => {
                 if (networkResponse && networkResponse.status === 200 && !networkResponse.redirected) {
-                    const cacheKey = isLocalAsset ? url.pathname : req;
+                    const cacheKey = isLocalOrigin ? url.pathname : req;
                     cache.put(cacheKey, networkResponse.clone());
                 }
                 return networkResponse;
